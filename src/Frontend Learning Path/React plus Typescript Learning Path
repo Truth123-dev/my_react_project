@@ -1,7 +1,0 @@
-<!-- 1. Types:                  
-   Types tell typescript what kind of value a varable could hold
-Examples 1: String
-let firstname: string = "Elijah";
-  console.log(firstname);
-
-Explanation: -->
