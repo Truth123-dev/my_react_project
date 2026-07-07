@@ -1,15 +1,22 @@
-export interface CartItem {
-  id: string;
-  name: string;
+
+
+
+export interface Product {
+  id: number;
+  title: string;
   price: number;
-  quantity: number;
+  description: string;
+  category: string;
   image: string;
+  rating: {
+    rate: number;
+    count: number;
+  };
 }
 
-export interface PaymentDetails {
-  cardName: string;
-  cardNumber: string;
-  expiry: string;
-  cvv: string;
-  zipCode: string;
+export interface CartItem {
+  product: Product;
+  quantity: number;
 }
+
+export type ActiveView = 'shop' | 'checkout' | 'order-confirmation';
