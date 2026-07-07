@@ -12,6 +12,8 @@
     "@prisma/client": "^7.8.0",
     "@sentry/node": "^10.62.0",
     "@sentry/tracing": "^7.120.4",
+    "@stripe/react-stripe-js": "^6.7.0",
+    "@stripe/stripe-js": "^9.9.0",
     "bcrypt": "^6.0.0",
     "cloudinary": "^2.10.0",
     "cookie-parser": "^1.4.7",
