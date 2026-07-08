@@ -5,13 +5,13 @@ import React from 'react';
 import { AuthProvider } from './context/AuthContext';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { AuthPage } from './views/AuthPage';
-import { Dashboard } from './views/Dashboard';
+import { OfficeDashboard } from './views/OfficeDashboard';
 
 function App() {
   return (
     <AuthProvider>
       <ProtectedRoute fallback={<AuthPage />}>
-        <Dashboard />
+        <OfficeDashboard />
       </ProtectedRoute>
     </AuthProvider>
   );

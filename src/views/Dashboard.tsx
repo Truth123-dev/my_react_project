@@ -1,9 +1,5 @@
 
 
-
-
-
-
 import React from 'react';
 import { useAuth } from '../context/AuthContext';
 
@@ -38,3 +34,5 @@ export const Dashboard: React.FC = () => {
     </div>
   );
 };
+
+

@@ -1,8 +1,9 @@
 
 
 
+import  { createContext, useContext, useState } from 'react';
+import type { ReactNode } from 'react';
 
-import React, { createContext, useContext, useState, type ReactNode } from 'react';
 
 interface User {
   id: string;
@@ -43,7 +44,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else {
         setUser({ id: '1', email, name: 'Standard User' });
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setError(err.message || 'Authentication failed. Please check your credentials.');
     }
   };
