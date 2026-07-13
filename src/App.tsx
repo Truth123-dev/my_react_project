@@ -1,758 +1,846 @@
 
 
-
 import React, { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
-} from 'recharts';
-import { 
-  LayoutDashboard, Package, ShoppingCart, Search, Plus, TrendingUp, DollarSign, Package2, AlertTriangle, CheckCircle, Clock, XCircle, ChevronRight, Trash2
+  Search, 
+  MapPin, 
+  Briefcase, 
+  Globe, 
+  Github, 
+  Linkedin, 
+  X, 
+  Plus, 
+  Filter,
+  ExternalLink
 } from 'lucide-react';
 
-// ==========================================
-// TypeScript Interfaces
-// ==========================================
-interface Product {
+// --- TYPES ---
+interface Developer {
   id: string;
   name: string;
-  category: string;
-  stock: number;
-  price: number;
-  status: string; // Simplified string type to avoid strict matching assignment errors
+  title: string;
+  location: string;
+  avatar: string;
+  availability: 'Available' | 'Busy' | 'Open to Offers';
+  skills: string[];
+  bio: string;
+  github?: string;
+  linkedin?: string;
+  portfolio?: string;
+  email: string;
 }
 
-interface Order {
-  id: string;
-  customerName: string;
-  date: string;
-  amount: number;
-  status: string; // Simplified string type to avoid strict matching assignment errors
-  items: string;
+interface Filters {
+  search: string;
+  location: string;
+  selectedSkills: string[];
+  availableOnly: boolean;
 }
 
-// ==========================================
-// Mock Initial Data
-// ==========================================
-const initialProducts: Product[] = [
-  { id: 'PROD-001', name: 'Premium Wireless Headphones', category: 'Electronics', stock: 45, price: 129.99, status: 'In Stock' },
-  { id: 'PROD-002', name: 'Ergonomic Office Chair', category: 'Furniture', stock: 8, price: 249.99, status: 'Low Stock' },
-  { id: 'PROD-003', name: 'Stainless Steel Water Bottle', category: 'Home & Kitchen', stock: 120, price: 24.99, status: 'In Stock' },
-  { id: 'PROD-004', name: 'Ultra-wide Gaming Monitor', category: 'Electronics', stock: 0, price: 399.99, status: 'Out of Stock' },
-  { id: 'PROD-005', name: 'Leather Running Shoes', category: 'Apparel', stock: 15, price: 89.99, status: 'In Stock' },
-  { id: 'PROD-006', name: 'Mechanical Keyboard RGB', category: 'Electronics', stock: 5, price: 79.99, status: 'Low Stock' },
-  { id: 'PROD-007', name: 'Cotton Crewneck T-Shirt', category: 'Apparel', stock: 200, price: 19.99, status: 'In Stock' },
-];
+// --- MOCK DATA ---
+const INITIAL_DEVELOPERS: Developer[] = [
+  {
+    id: '1',
+    name: 'Sarah Jenkins',
+    title: 'Senior Frontend Engineer',
+    location: 'San Francisco, CA',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80',
+    availability: 'Available',
+    skills: ['React', 'TypeScript', 'Tailwind CSS', 'Next.js', 'Framer Motion'],
+    bio: 'Passionate frontend developer focused on building highly interactive, accessible, and performant web applications with modern technologies.',
+    github: 'https://github.com',
+    linkedin: 'https://linkedin.com',
+    portfolio: 'https://example.com',
+    email: 'sarah.j@example.com'
+  },
+  {
+    id: '2',
+    name: 'Marcus Chen',
+    title: 'Full Stack Developer',
+    location: 'Toronto, ON',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80',
+    availability: 'Open to Offers',
+    skills: ['React', 'TypeScript', 'Node.js', 'PostgreSQL', 'GraphQL'],
+    bio: 'Pragmatic software engineer with a focus on writing clean, testable code. Experienced in building scalable APIs and responsive UI systems.',
+    github: 'https://github.com',
+    linkedin: 'https://linkedin.com',
+    email: 'marcus.chen@example.com'
+  },
+  {
+    id: '3',
+    name: 'Elena Rostova',
+    title: 'UI/UX Engineer',
+    location: 'Berlin, DE',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80',
+    availability: 'Busy',
+    skills: ['Figma', 'React', 'Tailwind CSS', 'CSS Grid', 'Three.js'],
+    bio: 'Bridging the gap between beautiful visual designs and functional frontends. Specializing in micro-interactions and motion design.',
+    github: 'https://github.com',
+    portfolio: 'https://example.com',
+    email: 'elena.r@example.com'
+  },
+  {
+    id: '4',
+    name: 'Amara Diallo',
+    title: 'Mobile & Web Developer',
+    location: 'London, UK',
+    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&h=150&q=80',
+    availability: 'Available',
+    skills: ['React', 'React Native', 'TypeScript', 'Tailwind CSS', 'Firebase'],
+    bio: 'Cross-platform app developer. Helping startups turn ideas into live products quickly and efficiently.',
+    github: 'https://github.com',
+    linkedin: 'https://linkedin.com',
+    portfolio: 'https://example.com',
+    email: 'amara@example.com'
+  },
+  {
+    id: '5',
+    name: 'Kenji Takahashi',
+    title: 'Backend Specialist',
+    location: 'Tokyo, JP',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150&q=80',
+    availability: 'Open to Offers',
+    skills: ['Node.js', 'Express', 'TypeScript', 'MongoDB', 'Docker'],
+    bio: 'Designing robust database architectures and APIs. Advocate for serverless technologies and automation pipelines.',
+    github: 'https://github.com',
+    linkedin: 'https://linkedin.com',
+    email: 'kenji@example.com'
+  },
+  {
+    id: '6',
+    name: 'Kenji Erica',
+    title: 'Backend Specialist',
+    location: 'Tokyo, JP',
+    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150&q=80',
+    availability: 'Open to Offers',
+    skills: ['Node.js', 'Express', 'TypeScript', 'MongoDB', 'Docker'],
+    bio: 'Designing robust database architectures and APIs. Advocate for serverless technologies and automation pipelines.',
+    github: 'https://github.com',
+    linkedin: 'https://linkedin.com',
+    email: 'kenji@example.com'
+  },
+  {
+    id: '7',
+    name: 'Cisse Diallo',
+    title: 'Mobile Developer',
+    location: 'Darker, Senegal',
+    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&h=150&q=80',
+    availability: 'Available',
+    skills: ['React', 'React Native', 'TypeScript', 'Tailwind CSS', 'Firebase'],
+    bio: 'Cross-platform app developer. Helping startups turn ideas into live products quickly and efficiently.',
+    github: 'https://github.com',
+    linkedin: 'https://linkedin.com',
+    portfolio: 'https://example.com',
+    email: 'amara@example.com'
+  },
+  {
+    id: '8',
+    name: 'Kang Chen',
+    title: 'Full Stack Developer',
+    location: 'Toronto, ON',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80',
+    availability: 'Open to Offers',
+    skills: ['React', 'TypeScript', 'Node.js', 'PostgreSQL', 'GraphQL'],
+    bio: 'Pragmatic software engineer with a focus on writing clean, testable code. Experienced in building scalable APIs and responsive UI systems.',
+    github: 'https://github.com',
+    linkedin: 'https://linkedin.com',
+    email: 'marcus.chen@example.com'
+  },
+  {
+    id: '9',
+    name: 'Marcus Rus',
+    title: 'Full Stack Developer',
+    location: 'Toronto, ON',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80',
+    availability: 'Open to Offers',
+    skills: ['React', 'TypeScript', 'Node.js', 'PostgreSQL', 'GraphQL'],
+    bio: 'Pragmatic software engineer with a focus on writing clean, testable code. Experienced in building scalable APIs and responsive UI systems.',
+    github: 'https://github.com',
+    linkedin: 'https://linkedin.com',
+    email: 'marcus.chen@example.com'
+  },
+  {
+    id: '10',
+    name: 'Sarah Loveth',
+    title: 'Senior Frontend Engineer',
+    location: 'San Francisco, CA',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80',
+    availability: 'Available',
+    skills: ['React', 'TypeScript', 'Tailwind CSS', 'Next.js', 'Framer Motion'],
+    bio: 'Passionate frontend developer focused on building highly interactive, accessible, and performant web applications with modern technologies.',
+    github: 'https://github.com',
+    linkedin: 'https://linkedin.com',
+    portfolio: 'https://example.com',
+    email: 'sarah.j@example.com'
+  },
 
-const initialOrders: Order[] = [
-  { id: 'ORD-5001', customerName: 'Sarah Jenkins', date: '2026-03-28', amount: 259.98, status: 'Delivered', items: '2x Premium Wireless Headphones' },
-  { id: 'ORD-5002', customerName: 'Michael Chen', date: '2026-03-29', amount: 249.99, status: 'Pending', items: '1x Ergonomic Office Chair' },
-  { id: 'ORD-5003', customerName: 'Emily Rodriguez', date: '2026-03-29', amount: 49.98, status: 'Shipped', items: '2x Stainless Steel Water Bottle' },
-  { id: 'ORD-5004', customerName: 'David Kim', date: '2026-03-30', amount: 399.99, status: 'Pending', items: '1x Ultra-wide Gaming Monitor' },
-  { id: 'ORD-5005', customerName: 'Jessica Taylor', date: '2026-03-30', amount: 89.99, status: 'Cancelled', items: '1x Leather Running Shoes' },
-  { id: 'ORD-5006', customerName: 'Robert Johnson', date: '2026-03-31', amount: 159.98, status: 'Delivered', items: '2x Mechanical Keyboard RGB' },
-];
-
-const monthlySalesData = [
-  { name: 'Jan', Sales: 4200, Revenue: 12400 },
-  { name: 'Feb', Sales: 4800, Revenue: 14200 },
-  { name: 'Mar', Sales: 5100, Revenue: 16100 },
-  { name: 'Apr', Sales: 5900, Revenue: 18400 },
-  { name: 'May', Sales: 6800, Revenue: 21000 },
-  { name: 'Jun', Sales: 7200, Revenue: 23500 },
-];
-
-const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ec4899'];
-
-export default function EcommerceDashboard() {
-  const [activeTab, setActiveTab] = useState<'analytics' | 'inventory' | 'orders'>('analytics');
   
-  // Primary shared data states
-  const [products, setProducts] = useState<Product[]>(initialProducts);
-  const [orders, setOrders] = useState<Order[]>(initialOrders);
+];
 
-  // Search & Filter States (Using standard string types to avoid union mismatch warnings)
-  const [inventorySearch, setInventorySearch] = useState('');
-  const [inventoryFilter, setInventoryFilter] = useState('All');
-  const [orderSearch, setOrderSearch] = useState('');
-  const [orderFilter, setOrderFilter] = useState('All');
+const ALL_SKILLS = [
+  'React', 'TypeScript', 'Tailwind CSS', 'Framer Motion', 
+  'Next.js', 'Node.js', 'PostgreSQL', 'GraphQL', 
+  'Figma', 'CSS Grid', 'Three.js', 'React Native', 
+  'Firebase', 'Express', 'MongoDB', 'Docker'
+];
 
-  // New Product Form State
-  const [isAddingProduct, setIsAddingProduct] = useState(false);
-  const [newProduct, setNewProduct] = useState({
-    name: '',
-    category: 'Electronics',
-    stock: 0,
-    price: 0
+const LOCATIONS = ['All Locations', 'San Francisco, CA', 'Toronto, ON', 'Berlin, DE', 'London, UK', 'Tokyo, JP'];
+
+export default function App() {
+  const [developers, setDevelopers] = useState<Developer[]>(INITIAL_DEVELOPERS);
+  const [selectedDeveloper, setSelectedDeveloper] = useState<Developer | null>(null);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  
+  const [filters, setFilters] = useState<Filters>({
+    search: '',
+    location: 'All Locations',
+    selectedSkills: [],
+    availableOnly: false
   });
 
-  // Dynamic Stock Level State Manager
-  const updateStock = (id: string, amount: number) => {
-    setProducts(prev => prev.map(p => {
-      if (p.id === id) {
-        const newStock = Math.max(0, p.stock + amount);
-        let status = 'In Stock';
-        if (newStock === 0) status = 'Out of Stock';
-        else if (newStock < 10) status = 'Low Stock';
-        return { ...p, stock: newStock, status };
-      }
-      return p;
+  // --- FILTER LOGIC ---
+  const filteredDevelopers = useMemo(() => {
+    return developers.filter(dev => {
+      const matchesSearch = 
+        dev.name.toLowerCase().includes(filters.search.toLowerCase()) ||
+        dev.title.toLowerCase().includes(filters.search.toLowerCase()) ||
+        dev.bio.toLowerCase().includes(filters.search.toLowerCase());
+
+      const matchesLocation = 
+        filters.location === 'All Locations' || dev.location === filters.location;
+
+      const matchesSkills = 
+        filters.selectedSkills.length === 0 || 
+        filters.selectedSkills.every(skill => dev.skills.includes(skill));
+
+      const matchesAvailability = 
+        !filters.availableOnly || dev.availability === 'Available';
+
+      return matchesSearch && matchesLocation && matchesSkills && matchesAvailability;
+    });
+  }, [developers, filters]);
+
+  // --- TOGGLE SKILL SELECTION ---
+  const handleSkillToggle = (skill: string) => {
+    setFilters(prev => ({
+      ...prev,
+      selectedSkills: prev.selectedSkills.includes(skill)
+        ? prev.selectedSkills.filter(s => s !== skill)
+        : [...prev.selectedSkills, skill]
     }));
   };
 
-  const handleAddProduct = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newProduct.name || newProduct.price <= 0) return;
-
-    let status = 'In Stock';
-    if (newProduct.stock === 0) status = 'Out of Stock';
-    else if (newProduct.stock < 10) status = 'Low Stock';
-
-    const productToAdd: Product = {
-      id: `PROD-${Date.now().toString().slice(-3)}`,
-      name: newProduct.name,
-      category: newProduct.category,
-      stock: newProduct.stock,
-      price: newProduct.price,
-      status
-    };
-
-    setProducts(prev => [productToAdd, ...prev]);
-    setNewProduct({ name: '', category: 'Electronics', stock: 0, price: 0 });
-    setIsAddingProduct(false);
+  // --- ADD NEW DEVELOPER ---
+  const handleAddDeveloper = (newDev: Omit<Developer, 'id'>) => {
+    const id = (developers.length + 1).toString();
+    setDevelopers(prev => [...prev, { ...newDev, id }]);
   };
 
-  const deleteProduct = (id: string) => {
-    setProducts(prev => prev.filter(p => p.id !== id));
+  const clearFilters = () => {
+    setFilters({
+      search: '',
+      location: 'All Locations',
+      selectedSkills: [],
+      availableOnly: false
+    });
   };
-
-  // Dynamic Order Status Manager
-  const updateOrderStatus = (id: string, nextStatus: string) => {
-    setOrders(prev => prev.map(o => o.id === id ? { ...o, status: nextStatus } : o));
-  };
-
-  // ==========================================
-  // Derived Metric Calculations
-  // ==========================================
-  const totalRevenue = useMemo(() => {
-    return orders
-      .filter(o => o.status !== 'Cancelled')
-      .reduce((sum, order) => sum + order.amount, 0);
-  }, [orders]);
-
-  const activeOrdersCount = useMemo(() => {
-    return orders.filter(o => o.status === 'Pending' || o.status === 'Shipped').length;
-  }, [orders]);
-
-  const lowStockCount = useMemo(() => {
-    return products.filter(p => p.stock < 10).length;
-  }, [products]);
-
-  const avgOrderValue = useMemo(() => {
-    const validOrders = orders.filter(o => o.status !== 'Cancelled');
-    return validOrders.length ? (totalRevenue / validOrders.length) : 0;
-  }, [orders, totalRevenue]);
-
-  const categoryData = useMemo(() => {
-    const counts: { [key: string]: number } = {};
-    products.forEach(p => {
-      counts[p.category] = (counts[p.category] || 0) + 1;
-    });
-    return Object.keys(counts).map(name => ({
-      name,
-      value: counts[name]
-    }));
-  }, [products]);
-
-  // ==========================================
-  // Filter Logic Implementation
-  // ==========================================
-  const filteredProducts = useMemo(() => {
-    return products.filter(p => {
-      const matchesSearch = p.name.toLowerCase().includes(inventorySearch.toLowerCase()) || p.id.toLowerCase().includes(inventorySearch.toLowerCase());
-      const matchesFilter = inventoryFilter === 'All' || p.status === inventoryFilter;
-      return matchesSearch && matchesFilter;
-    });
-  }, [products, inventorySearch, inventoryFilter]);
-
-  const filteredOrders = useMemo(() => {
-    return orders.filter(o => {
-      const matchesSearch = o.customerName.toLowerCase().includes(orderSearch.toLowerCase()) || o.id.toLowerCase().includes(orderSearch.toLowerCase());
-      const matchesFilter = orderFilter === 'All' || o.status === orderFilter;
-      return matchesSearch && matchesFilter;
-    });
-  }, [orders, orderSearch, orderFilter]);
 
   return (
-    <div className="flex h-screen bg-slate-50 text-slate-800 font-sans overflow-hidden">
-      
-      {/* Sidebar Navigation */}
-      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col justify-between z-10">
-        <div>
-          <div className="p-6 border-b border-slate-100">
-            <div className="flex items-center gap-2">
-              <div className="bg-indigo-600 text-white p-2 rounded-lg">
-                <Package2 className="h-5 w-5" />
-              </div>
-              <span className="font-bold text-lg text-slate-900 tracking-tight">Apex Retail</span>
+    <div className="min-h-screen bg-slate-50 text-slate-800 antialiased selection:bg-indigo-100">
+      {/* Header */}
+      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur-md">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-100">
+              <span className="font-extrabold text-lg">DF</span>
+            </div>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-slate-900">DevFind</h1>
+              <p className="text-xs text-slate-500">Developer Directory</p>
             </div>
           </div>
           
-          <nav className="p-4 space-y-1">
-            <button
-              onClick={() => setActiveTab('analytics')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === 'analytics'
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-              }`}
-            >
-              <LayoutDashboard className="h-4 w-4" />
-              Dashboard Overview
-            </button>
-            <button
-              onClick={() => setActiveTab('inventory')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === 'inventory'
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-              }`}
-            >
-              <Package className="h-4 w-4" />
-              Inventory Management
-            </button>
-            <button
-              onClick={() => setActiveTab('orders')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                activeTab === 'orders'
-                  ? 'bg-indigo-50 text-indigo-700'
-                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-              }`}
-            >
-              <ShoppingCart className="h-4 w-4" />
-              Order Operations
-            </button>
-          </nav>
+          <button
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition duration-150"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Join Directory</span>
+          </button>
         </div>
+      </header>
 
-        <div className="p-4 border-t border-slate-100 text-xs text-slate-400 text-center">
-          Frontend Portal v1.2.0
-        </div>
-      </aside>
-
-      {/* Main Panel Content */}
-      <main className="flex-1 flex flex-col overflow-y-auto">
+      {/* Main Container */}
+      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
         
-        {/* Top Sticky Header */}
-        <header className="bg-white border-b border-slate-200 h-16 flex items-center justify-between px-8 sticky top-0 z-10">
-          <h1 className="text-xl font-semibold text-slate-800">
-            {activeTab === 'analytics' && 'Executive Analytics'}
-            {activeTab === 'inventory' && 'Inventory Ledger'}
-            {activeTab === 'orders' && 'Order Processing'}
-          </h1>
-          <div className="flex items-center gap-4">
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-              Environment: Demo
-            </span>
+        {/* Hero Section */}
+        <div className="mb-10 text-center md:text-left md:flex md:items-center md:justify-between">
+          <div className="max-w-2xl">
+            <h2 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+              Discover and Connect with Developers
+            </h2>
+            <p className="mt-2 text-base text-slate-600">
+              A curated platform to browse registered software engineers, filterable by locations, engineering skills, and current availability status.
+            </p>
           </div>
-        </header>
+          <div className="mt-4 md:mt-0 flex gap-4 justify-center md:justify-end text-sm text-slate-600">
+            <div className="rounded-lg bg-white px-4 py-2 shadow-sm border border-slate-100 text-center">
+              <span className="block text-xl font-bold text-slate-900">{developers.length}</span>
+              <span>Registered</span>
+            </div>
+            <div className="rounded-lg bg-white px-4 py-2 shadow-sm border border-slate-100 text-center">
+              <span className="block text-xl font-bold text-green-600">
+                {developers.filter(d => d.availability === 'Available').length}
+              </span>
+              <span>Available Now</span>
+            </div>
+          </div>
+        </div>
 
-        {/* Dynamic Inner Layout */}
-        <div className="p-8 max-w-7xl w-full mx-auto space-y-8">
+        {/* Content Layout */}
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-4">
           
-          {/* TAB 1: EXECUTIVE ANALYTICS */}
-          {activeTab === 'analytics' && (
-            <>
-              {/* Summary KPIs */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-                  <div className="p-3 bg-emerald-50 text-emerald-600 rounded-lg">
-                    <DollarSign className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500 font-medium">Total Net Revenue</p>
-                    <h3 className="text-2xl font-bold text-slate-900">${totalRevenue.toFixed(2)}</h3>
-                  </div>
-                </div>
-
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-                  <div className="p-3 bg-indigo-50 text-indigo-600 rounded-lg">
-                    <ShoppingCart className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500 font-medium">Active Order Backlog</p>
-                    <h3 className="text-2xl font-bold text-slate-900">{activeOrdersCount}</h3>
-                  </div>
-                </div>
-
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-                  <div className="p-3 bg-amber-50 text-amber-600 rounded-lg">
-                    <AlertTriangle className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500 font-medium">Low Stock Triggers</p>
-                    <h3 className="text-2xl font-bold text-slate-900">{lowStockCount}</h3>
-                  </div>
-                </div>
-
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-                  <div className="p-3 bg-violet-50 text-violet-600 rounded-lg">
-                    <TrendingUp className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-slate-500 font-medium">Average Order Value</p>
-                    <h3 className="text-2xl font-bold text-slate-900">${avgOrderValue.toFixed(2)}</h3>
-                  </div>
-                </div>
-                
+          {/* Filters Sidebar */}
+          <aside className="lg:col-span-1 space-y-6">
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
+                <span className="flex items-center gap-2 font-bold text-slate-900">
+                  <Filter className="h-4 w-4 text-slate-500" />
+                  Filters
+                </span>
+                {(filters.search || filters.location !== 'All Locations' || filters.selectedSkills.length > 0 || filters.availableOnly) && (
+                  <button 
+                    onClick={clearFilters}
+                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
+                  >
+                    Clear All
+                  </button>
+                )}
               </div>
 
-              {/* Data Visualization Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                
-                {/* Timeline Revenue/Sales Chart */}
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm lg:col-span-2">
-                  <div className="mb-4">
-                    <h4 className="text-base font-semibold text-slate-900">Revenue & Sales Trends</h4>
-                    <p className="text-xs text-slate-500">Historical performance scaling monthly averages</p>
-                  </div>
-                  <div className="h-80 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={monthlySalesData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                        <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} />
-                        <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} />
-                        <Tooltip />
-                        <Legend verticalAlign="top" height={36} />
-                        <Line type="monotone" dataKey="Revenue" stroke="#6366f1" strokeWidth={3} activeDot={{ r: 8 }} />
-                        <Line type="monotone" dataKey="Sales" stroke="#10b981" strokeWidth={3} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* Category Breakdown (Pie) */}
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col justify-between">
-                  <div>
-                    <h4 className="text-base font-semibold text-slate-900">Inventory Distribution</h4>
-                    <p className="text-xs text-slate-500">Breakdown of listings by primary taxonomy</p>
-                  </div>
-                  <div className="h-64 relative flex items-center justify-center">
-                    {categoryData.length > 0 ? (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={categoryData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={60}
-                            outerRadius={80}
-                            paddingAngle={5}
-                            dataKey="value"
-                          >
-                            {categoryData.map((_entry, index) => (
-                              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <span className="text-slate-400 text-sm">No inventory recorded.</span>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-xs">
-                    {categoryData.map((item, idx) => (
-                      <div key={item.name} className="flex items-center gap-1.5">
-                        <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS[idx % COLORS.length] }} />
-                        <span className="text-slate-600 font-medium">{item.name} ({item.value})</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-
-              {/* Status Board Alerts */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                {/* Out of Stock Alert Panel */}
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <div className="flex justify-between items-center mb-4">
-                    <h4 className="text-base font-semibold text-slate-900">Critical Stock Warnings</h4>
-                    <span className="text-xs bg-red-50 text-red-600 px-2.5 py-1 rounded-full font-medium">Action Required</span>
-                  </div>
-                  <div className="space-y-3">
-                    {products.filter(p => p.stock < 10).length === 0 ? (
-                      <p className="text-slate-500 text-sm py-4 text-center">All product levels within optimal limits.</p>
-                    ) : (
-                      products.filter(p => p.stock < 10).slice(0, 4).map(product => (
-                        <div key={product.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
-                         <div>
-                            <p className="text-sm font-semibold text-slate-800">{product.name}</p>
-                            <p className="text-xs text-slate-500">{product.category} • SKU: {product.id}</p>
-                          </div>
-                          <div className="text-right">
-                            <span className={`text-xs px-2 py-1 rounded-full font-semibold ${
-                              product.stock === 0 ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800'
-                            }`}>
-                              {product.stock} units
-                            </span>
-                            <button 
-                              onClick={() => { setActiveTab('inventory'); setInventoryFilter('Low Stock'); }} 
-                              className="block text-indigo-600 text-xs mt-1.5 font-medium hover:underline"
-                            >
-                              Restock Ledger
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-                {/* Processing/Recent Pending Orders Panel */}
-                <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-                  <div className="flex justify-between items-center mb-4">
-                    <h4 className="text-base font-semibold text-slate-900">Awaiting Fulfillment</h4>
-                    <span className="text-xs bg-amber-50 text-amber-600 px-2.5 py-1 rounded-full font-medium">Pending Release</span>
-                  </div>
-                  <div className="space-y-3">
-                    {orders.filter(o => o.status === 'Pending').length === 0 ? (
-                      <p className="text-slate-500 text-sm py-4 text-center">No outstanding orders waiting fulfillment.</p>
-                    ) : (
-                      orders.filter(o => o.status === 'Pending').slice(0, 4).map(order => (
-                        <div key={order.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-100">
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <p className="text-sm font-semibold text-slate-800">{order.customerName}</p>
-                              <span className="text-xs text-slate-400">({order.id})</span>
-                            </div>
-                            <p className="text-xs text-slate-500 italic max-w-xs truncate">{order.items}</p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-sm font-bold text-slate-800">${order.amount.toFixed(2)}</p>
-                            <button 
-                              onClick={() => { setActiveTab('orders'); setOrderFilter('Pending'); }} 
-                              className="inline-flex items-center text-indigo-600 text-xs mt-1 font-medium hover:underline"
-                            >
-                              Update Status <ChevronRight className="h-3 w-3" />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
-
-              </div>
-            </>
-          )}
-
-          {/* TAB 2: INVENTORY MANAGEMENT */}
-          {activeTab === 'inventory' && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-              
-              {/* Toolbar & Filters */}
-              <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="flex flex-1 items-center gap-3">
-                  <div className="relative w-full md:max-w-xs">
-                    <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
-                      <Search className="h-4 w-4" />
-                    </span>
+              <div className="space-y-5">
+                {/* Search */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Search</label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
                     <input
                       type="text"
-                      className="block w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-slate-50 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-                      placeholder="Search listings..."
-                      value={inventorySearch}
-                      onChange={(e) => setInventorySearch(e.target.value)}
+                      placeholder="Name, title, or bio..."
+                      value={filters.search}
+                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
+                      className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-4 text-sm outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                     />
                   </div>
-                  
+                </div>
+
+                {/* Location */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Location</label>
                   <select
-                    className="border border-slate-200 rounded-lg py-2 px-3 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    value={inventoryFilter}
-                    onChange={(e) => setInventoryFilter(e.target.value)}
+                    value={filters.location}
+                    onChange={(e) => setFilters(prev => ({ ...prev, location: e.target.value }))}
+                    className="w-full rounded-lg border border-slate-200 bg-white p-2.5 text-sm outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                   >
-                    <option value="All">All Levels</option>
-                    <option value="In Stock">In Stock Only</option>
-                    <option value="Low Stock">Low Stock Alert</option>
-                    <option value="Out of Stock">Disrupted Stock (OOS)</option>
+                    {LOCATIONS.map(loc => (
+                      <option key={loc} value={loc}>{loc}</option>
+                    ))}
                   </select>
                 </div>
 
+                {/* Availability Toggle */}
+                <div>
+                  <label className="flex items-center gap-2 cursor-pointer py-1">
+                    <input
+                      type="checkbox"
+                      checked={filters.availableOnly}
+                      onChange={(e) => setFilters(prev => ({ ...prev, availableOnly: e.target.checked }))}
+                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span className="text-sm font-medium text-slate-700">Available for Hire Only</span>
+                  </label>
+                </div>
+
+                {/* Skills Multi-select */}
+                <div>
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
+                    Skills ({filters.selectedSkills.length})
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+                    {ALL_SKILLS.map(skill => {
+                      const isSelected = filters.selectedSkills.includes(skill);
+                      return (
+                        <button
+                          key={skill}
+                          onClick={() => handleSkillToggle(skill)}
+                          className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition ${
+                            isSelected 
+                              ? 'bg-indigo-600 text-white' 
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                          }`}
+                        >
+                          {skill}
+                          {isSelected && <X className="h-3 w-3" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </aside>
+
+          {/* Directory Listings */}
+          <div className="lg:col-span-3">
+            {filteredDevelopers.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-white py-16 px-4 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                  <Search className="h-6 w-6" />
+                </div>
+                <h3 className="mt-4 text-base font-semibold text-slate-900">No Developers Found</h3>
+                <p className="mt-1 text-sm text-slate-500">
+                  Try adjusting your search query, location filter, or skill tags.
+                </p>
                 <button
-                  onClick={() => setIsAddingProduct(!isAddingProduct)}
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-2 transition-colors duration-150 shadow-sm"
+                  onClick={clearFilters}
+                  className="mt-4 rounded-lg bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 transition"
                 >
-                  <Plus className="h-4 w-4" /> Create Product Record
+                  Clear Filters
                 </button>
               </div>
-
-              {/* Dynamic Add Product Module */}
-              {isAddingProduct && (
-                <div className="bg-slate-50 p-6 border-b border-slate-100 transition-all">
-                  <h4 className="text-sm font-semibold text-slate-900 mb-4">Register New E-Commerce Asset</h4>
-                  <form onSubmit={handleAddProduct} className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Product Identity</label>
-                      <input
-                        type="text"
-                        required
-                        className="w-full border border-slate-200 rounded-lg py-1.5 px-3 text-sm focus:ring-1 focus:ring-indigo-500 bg-white"
-                        placeholder="e.g. Ergonomic Keyboard"
-                        value={newProduct.name}
-                        onChange={(e) => setNewProduct(prev => ({ ...prev, name: e.target.value }))}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Department</label>
-                      <select
-                        className="w-full border border-slate-200 rounded-lg py-1.5 px-3 text-sm focus:ring-1 focus:ring-indigo-500 bg-white"
-                        value={newProduct.category}
-                        onChange={(e) => setNewProduct(prev => ({ ...prev, category: e.target.value }))}
-                      >
-                        <option value="Electronics">Electronics</option>
-                        <option value="Furniture">Furniture</option>
-                        <option value="Home & Kitchen">Home & Kitchen</option>
-                        <option value="Apparel">Apparel</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-slate-500 mb-1">Initial Stock Count</label>
-                      <input
-                        type="number"
-                        min="0"
-                        className="w-full border border-slate-200 rounded-lg py-1.5 px-3 text-sm focus:ring-1 focus:ring-indigo-500 bg-white"
-                        value={newProduct.stock}
-                        onChange={(e) => setNewProduct(prev => ({ ...prev, stock: parseInt(e.target.value) || 0 }))}
-                      />
-                    </div>
-                    <div className="flex items-end gap-3">
-                      <div className="flex-1">
-                        <label className="block text-xs font-medium text-slate-500 mb-1">Unit Selling Price ($)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          className="w-full border border-slate-200 rounded-lg py-1.5 px-3 text-sm focus:ring-1 focus:ring-indigo-500 bg-white"
-                          value={newProduct.price}
-                          onChange={(e) => setNewProduct(prev => ({ ...prev, price: parseFloat(e.target.value) || 0 }))}
-                        />
-                      </div>
-                      <button
-                        type="submit"
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                      >
-                        Commit
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              )}
-
-              {/* Inventory Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left">
-                  <thead className="bg-slate-50 text-slate-500 text-xs font-semibold uppercase tracking-wider border-b border-slate-100">
-                    <tr>
-                      <th className="py-4 px-6">ID & Specifications</th>
-                      <th className="py-4 px-6">Category</th>
-                      <th className="py-4 px-6">Evaluation Unit Price</th>
-                      <th className="py-4 px-6">Stock Status</th>
-                      <th className="py-4 px-6">Inventory Volume</th>
-                      <th className="py-4 px-6 text-right">Ledger Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-sm">
-                    {filteredProducts.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="py-8 text-center text-slate-400">
-                          No stock inventory elements matched the current queries.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredProducts.map((product) => (
-                        <tr key={product.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-4 px-6">
-                            <span className="font-semibold text-slate-800 block">{product.name}</span>
-                            <span className="text-xs text-slate-400 font-mono">{product.id}</span>
-                          </td>
-                          <td className="py-4 px-6 text-slate-600">{product.category}</td>
-                          <td className="py-4 px-6 text-slate-900 font-medium">${product.price.toFixed(2)}</td>
-                          <td className="py-4 px-6">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${
-                              product.status === 'In Stock' && 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                            } ${
-                              product.status === 'Low Stock' && 'bg-amber-50 text-amber-700 border border-amber-200'
-                            } ${
-                              product.status === 'Out of Stock' && 'bg-rose-50 text-rose-700 border border-rose-200'
-                            }`}>
-                              <span className={`w-1.5 h-1.5 rounded-full ${
-                                product.status === 'In Stock' && 'bg-emerald-500'
-                              } ${
-                                product.status === 'Low Stock' && 'bg-amber-500'
-                              } ${
-                                product.status === 'Out of Stock' && 'bg-rose-500'
-                              }`} />
-                              {product.status}
-                            </span>
-                          </td>
-                          <td className="py-4 px-6">
-                            <div className="flex items-center gap-3">
-                              <button 
-                                onClick={() => updateStock(product.id, -1)}
-                                className="w-6 h-6 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center font-bold text-slate-600 transition-colors"
-                              >
-                                -
-                              </button>
-                              <span className="font-semibold text-slate-800 w-8 text-center">{product.stock}</span>
-                              <button 
-                                onClick={() => updateStock(product.id, 1)}
-                                className="w-6 h-6 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center font-bold text-slate-600 transition-colors"
-                              >
-                                +
-                              </button>
-                            </div>
-                          </td>
-                          <td className="py-4 px-6 text-right">
-                            <button
-                              onClick={() => deleteProduct(product.id)}
-                              className="text-slate-400 hover:text-rose-600 p-1.5 rounded hover:bg-rose-50 transition-colors"
-                              title="Delete Item Record"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-            </div>
-          )}
-
-          {/* TAB 3: ORDER OPERATIONS */}
-          {activeTab === 'orders' && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-              
-              {/* Toolbar & Filters */}
-              <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="relative w-full md:max-w-xs">
-                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-slate-400">
-                    <Search className="h-4 w-4" />
-                  </span>
-                  <input
-                    type="text"
-                    className="block w-full pl-10 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 bg-white"
-                    placeholder="Search orders..."
-                    value={orderSearch}
-                    onChange={(e) => setOrderSearch(e.target.value)}
-                  />
-                </div>
-
-                <div className="flex flex-wrap gap-2">
-                  {['All', 'Pending', 'Shipped', 'Delivered', 'Cancelled'].map((status) => (
-                    <button
-                      key={status}
-                      onClick={() => setOrderFilter(status)}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
-                        orderFilter === status
-                          ? 'bg-indigo-600 border-indigo-600 text-white'
-                          : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-                      }`}
+            ) : (
+              <motion.div 
+                layout 
+                className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+              >
+                <AnimatePresence mode="popLayout">
+                  {filteredDevelopers.map(dev => (
+                    <motion.div
+                      layout
+                      initial={{ opacity: 0, y: 12 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, scale: 0.95 }}
+                      transition={{ duration: 0.2 }}
+                      key={dev.id}
+                      onClick={() => setSelectedDeveloper(dev)}
+                      className="group cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-slate-300 flex flex-col justify-between"
                     >
-                      {status}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                      <div>
+                        {/* Status + Avatar */}
+                        <div className="flex items-start justify-between gap-4">
+                          <img 
+                            src={dev.avatar} 
+                            alt={dev.name} 
+                            className="h-12 w-12 rounded-xl object-cover ring-2 ring-slate-100"
+                          />
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                            dev.availability === 'Available' 
+                              ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/10' 
+                              : dev.availability === 'Open to Offers' 
+                              ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/10'
+                              : 'bg-slate-100 text-slate-600 ring-1 ring-slate-500/10'
+                          }`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${
+                              dev.availability === 'Available' ? 'bg-emerald-500' : dev.availability === 'Open to Offers' ? 'bg-amber-500' : 'bg-slate-400'
+                            }`} />
+                            {dev.availability}
+                          </span>
+                        </div>
 
-              {/* Orders Table */}
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left">
-                  <thead className="bg-slate-50 text-slate-500 text-xs font-semibold uppercase tracking-wider border-b border-slate-100">
-                    <tr>
-                      <th className="py-4 px-6">Transaction ID</th>
-                      <th className="py-4 px-6">Customer Identity</th>
-                      <th className="py-4 px-6">Order Details</th>
-                      <th className="py-4 px-6">Order Date</th>
-                      <th className="py-4 px-6">Invoice value</th>
-                      <th className="py-4 px-6">Status Marker</th>
-                      <th className="py-4 px-6 text-right">Lifecycle Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-sm">
-                    {filteredOrders.length === 0 ? (
-                      <tr>
-                        <td colSpan={7} className="py-8 text-center text-slate-400">
-                          No transactions match your queries.
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredOrders.map((order) => (
-                        <tr key={order.id} className="hover:bg-slate-50 transition-colors">
-                          <td className="py-4 px-6 font-mono text-xs font-bold text-indigo-600">
-                            {order.id}
-                          </td>
-                          <td className="py-4 px-6">
-                            <span className="font-semibold text-slate-800 block">{order.customerName}</span>
-                          </td>
-                          <td className="py-4 px-6 text-slate-500 italic max-w-xs truncate" title={order.items}>
-                            {order.items}
-                          </td>
-                          <td className="py-4 px-6 text-slate-500 font-mono text-xs">{order.date}</td>
-                          <td className="py-4 px-6 font-medium text-slate-900">${order.amount.toFixed(2)}</td>
-                          <td className="py-4 px-6">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border ${
-                              order.status === 'Delivered' && 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                            } ${
-                              order.status === 'Pending' && 'bg-amber-50 text-amber-700 border-amber-100'
-                            } ${
-                              order.status === 'Shipped' && 'bg-blue-50 text-blue-700 border-blue-100'
-                            } ${
-                              order.status === 'Cancelled' && 'bg-rose-50 text-rose-700 border-rose-100'
-                            }`}>
-                              {order.status === 'Delivered' && <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />}
-                              {order.status === 'Pending' && <Clock className="h-3.5 w-3.5 text-amber-500" />}
-                              {order.status === 'Shipped' && <Package className="h-3.5 w-3.5 text-blue-500" />}
-                              {order.status === 'Cancelled' && <XCircle className="h-3.5 w-3.5 text-rose-500" />}
-                              {order.status}
+                        {/* Title Info */}
+                        <div className="mt-4">
+                          <h3 className="font-bold text-slate-900 group-hover:text-indigo-600 transition">
+                            {dev.name}
+                          </h3>
+                          <p className="text-sm font-medium text-slate-600">{dev.title}</p>
+                          
+                          <div className="mt-2.5 flex items-center gap-1 text-xs text-slate-500">
+                            <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span>{dev.location}</span>
+                          </div>
+                        </div>
+
+                        {/* Bio snippet */}
+                        <p className="mt-3 text-xs text-slate-500 line-clamp-2 leading-relaxed">
+                          {dev.bio}
+                        </p>
+                      </div>
+
+                      {/* Skills Snippet */}
+                      <div className="mt-5 pt-4 border-t border-slate-100">
+                        <div className="flex flex-wrap gap-1">
+                          {dev.skills.slice(0, 3).map(skill => (
+                            <span 
+                              key={skill} 
+                              className="inline-flex rounded bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 ring-1 ring-inset ring-slate-500/10"
+                            >
+                              {skill}
                             </span>
-                          </td>
-                          <td className="py-4 px-6 text-right">
-                            <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
-                              {['Pending', 'Shipped', 'Delivered', 'Cancelled'].map((st) => (
-                                <button
-                                  key={st}
-                                  onClick={() => updateOrderStatus(order.id, st)}
-                                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                                    order.status === st
-                                      ? 'bg-indigo-50 text-indigo-600 font-semibold'
-                                      : 'text-slate-400 hover:text-slate-700'
-                                  }`}
-                                  title={`Mark as ${st}`}
-                                >
-                                  {st[0]}
-                                </button>
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-            </div>
-          )}
+                          ))}
+                          {dev.skills.length > 3 && (
+                            <span className="inline-flex items-center rounded bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                              +{dev.skills.length - 3} more
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </motion.div>
+            )}
+          </div>
 
         </div>
       </main>
+
+      {/* --- DEVELOPER DETAIL MODAL --- */}
+      <AnimatePresence>
+        {selectedDeveloper && (
+          <React.Fragment>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.4 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedDeveloper(null)}
+              className="fixed inset-0 z-50 bg-slate-900"
+            />
+            {/* Modal Box */}
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 16 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 16 }}
+                transition={{ duration: 0.2 }}
+                className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-200"
+              >
+                {/* Header Profile background */}
+                <div className="h-24 bg-gradient-to-r from-indigo-500 to-indigo-800 p-4 flex justify-end">
+                  <button 
+                    onClick={() => setSelectedDeveloper(null)}
+                    className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm hover:bg-white/30 transition"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="relative px-6 pb-6">
+                  {/* Absolute positioning of Avatar to overlap the gradient */}
+                  <div className="absolute -top-10 left-6">
+                    <img 
+                      src={selectedDeveloper.avatar} 
+                      alt={selectedDeveloper.name} 
+                      className="h-20 w-20 rounded-2xl object-cover ring-4 ring-white shadow-md"
+                    />
+                  </div>
+
+                  <div className="pt-12">
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                      <div>
+                        <h3 className="text-xl font-bold text-slate-900">{selectedDeveloper.name}</h3>
+                        <p className="text-sm font-semibold text-indigo-600">{selectedDeveloper.title}</p>
+                      </div>
+                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        selectedDeveloper.availability === 'Available' 
+                          ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/10' 
+                          : selectedDeveloper.availability === 'Open to Offers' 
+                          ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/10'
+                          : 'bg-slate-100 text-slate-600 ring-1 ring-slate-500/10'
+                      }`}>
+                        <span className={`h-1.5 w-1.5 rounded-full ${
+                          selectedDeveloper.availability === 'Available' ? 'bg-emerald-500' : selectedDeveloper.availability === 'Open to Offers' ? 'bg-amber-500' : 'bg-slate-400'
+                        }`} />
+                        {selectedDeveloper.availability}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-500">
+                      <span className="flex items-center gap-1">
+                        <MapPin className="h-3.5 w-3.5 text-slate-400" />
+                        {selectedDeveloper.location}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Briefcase className="h-3.5 w-3.5 text-slate-400" />
+                        {selectedDeveloper.email}
+                      </span>
+                    </div>
+
+                    <div className="mt-5">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">About</h4>
+                      <p className="mt-1.5 text-sm text-slate-600 leading-relaxed">
+                        {selectedDeveloper.bio}
+                      </p>
+                    </div>
+
+                    <div className="mt-5">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Skills & Tech</h4>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {selectedDeveloper.skills.map(skill => (
+                          <span 
+                            key={skill} 
+                            className="inline-flex rounded bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700"
+                          >
+                            {skill}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Socials / External links */}
+                    <div className="mt-6 pt-5 border-t border-slate-100 flex gap-3">
+                      {selectedDeveloper.github && (
+                        <a 
+                          href={selectedDeveloper.github} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3.5 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
+                        >
+                          <Github className="h-4 w-4" />
+                          GitHub
+                        </a>
+                      )}
+                      {selectedDeveloper.linkedin && (
+                        <a 
+                          href={selectedDeveloper.linkedin} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3.5 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
+                        >
+                          <Linkedin className="h-4 w-4" />
+                          LinkedIn
+                        </a>
+                      )}
+                      {selectedDeveloper.portfolio && (
+                        <a 
+                          href={selectedDeveloper.portfolio} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3.5 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
+                        >
+                          <Globe className="h-4 w-4" />
+                          Portfolio
+                        </a>
+                      )}
+                      <a 
+                        href={`mailto:${selectedDeveloper.email}`}
+                        className="ml-auto flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 shadow-sm transition"
+                      >
+                        Email Developer
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          </React.Fragment>
+        )}
+      </AnimatePresence>
+
+      {/* --- ADD NEW DEVELOPER MODAL --- */}
+      <AnimatePresence>
+        {isAddModalOpen && (
+          <React.Fragment>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.4 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsAddModalOpen(false)}
+              className="fixed inset-0 z-50 bg-slate-900"
+            />
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 16 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 16 }}
+                className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-200"
+              >
+                <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+                  <h3 className="font-bold text-slate-900">Add Profile to Directory</h3>
+                  <button 
+                    onClick={() => setIsAddModalOpen(false)}
+                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                
+                <AddDeveloperForm 
+                  onClose={() => setIsAddModalOpen(false)} 
+                  onSubmit={handleAddDeveloper} 
+                />
+              </motion.div>
+            </div>
+          </React.Fragment>
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+// --- SUB-COMPONENT: ADD DEVELOPER FORM ---
+interface AddFormProps {
+  onClose: () => void;
+  onSubmit: (dev: Omit<Developer, 'id'>) => void;
+}
+
+function AddDeveloperForm({ onClose, onSubmit }: AddFormProps) {
+  const [name, setName] = useState('');
+  const [title, setTitle] = useState('');
+  const [location, setLocation] = useState('San Francisco, CA');
+  const [availability, setAvailability] = useState<'Available' | 'Busy' | 'Open to Offers'>('Available');
+  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
+  const [bio, setBio] = useState('');
+  const [email, setEmail] = useState('');
+  
+  const handleToggleFormSkill = (skill: string) => {
+    setSelectedSkills(prev => 
+      prev.includes(skill) ? prev.filter(s => s !== skill) : [...prev, skill]
+    );
+  };
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !title || !bio || !email) return;
+
+    // Use placeholder avatar
+    const avatar = `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 1000000)}?auto=format&fit=crop&w=150&h=150&q=80`;
+
+    onSubmit({
+      name,
+      title,
+      location,
+      avatar,
+      availability,
+      skills: selectedSkills.length > 0 ? selectedSkills : ['React'],
+      bio,
+      email,
+      github: 'https://github.com',
+      linkedin: 'https://linkedin.com'
+    });
+    
+    onClose();
+  };
+
+  return (
+    <form onSubmit={handleFormSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name *</label>
+          <input
+            type="text"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="John Doe"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">Role Title *</label>
+          <input
+            type="text"
+            required
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Frontend Architect"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">Location</label>
+          <select
+            value={location}
+            onChange={(e) => setLocation(e.target.value)}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
+          >
+            {LOCATIONS.filter(loc => loc !== 'All Locations').map(loc => (
+              <option key={loc} value={loc}>{loc}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
+          <select
+            value={availability}
+            onChange={(e) => setAvailability(e.target.value as never)}
+            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
+          >
+            <option value="Available">Available</option>
+            <option value="Open to Offers">Open to Offers</option>
+            <option value="Busy">Busy</option>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-semibold text-slate-700 mb-1">Email Address *</label>
+        <input
+          type="email"
+          required
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="yourname@domain.com"
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-semibold text-slate-700 mb-1">Bio Description *</label>
+        <textarea
+          required
+          rows={3}
+          value={bio}
+          onChange={(e) => setBio(e.target.value)}
+          placeholder="A brief introduction highlighting your key engineering domains and design patterns..."
+          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 resize-none"
+        />
+      </div>
+
+      <div>
+        <label className="block text-xs font-semibold text-slate-700 mb-1.5">Select Skills</label>
+        <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto border border-slate-100 p-2 rounded-lg bg-slate-50">
+          {ALL_SKILLS.map(skill => {
+            const active = selectedSkills.includes(skill);
+            return (
+              <button
+                type="button"
+                key={skill}
+                onClick={() => handleToggleFormSkill(skill)}
+                className={`rounded px-2 py-1 text-xs font-medium transition ${
+                  active 
+                    ? 'bg-indigo-600 text-white' 
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                {skill}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition"
+        >
+          Add Developer
+        </button>
+      </div>
+    </form>
   );
 }
 
