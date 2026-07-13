@@ -1,846 +1,764 @@
 
-
-import React, { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { 
   Search, 
-  MapPin, 
-  Briefcase, 
-  Globe, 
-  Github, 
-  Linkedin, 
-  X, 
+  Calendar, 
+  ShoppingCart, 
+  Heart, 
   Plus, 
-  Filter,
-  ExternalLink
+  Trash2, 
+  ChevronRight, 
+  Settings, 
+  Check,
+  Clock,
+  BookOpen
 } from 'lucide-react';
 
-// --- TYPES ---
-interface Developer {
+// ==========================================
+// TYPES & INTERFACES
+// ==========================================
+
+export interface Recipe {
   id: string;
-  name: string;
-  title: string;
-  location: string;
-  avatar: string;
-  availability: 'Available' | 'Busy' | 'Open to Offers';
-  skills: string[];
-  bio: string;
-  github?: string;
-  linkedin?: string;
-  portfolio?: string;
-  email: string;
+  label: string;
+  image: string;
+  source: string;
+  url: string;
+  yield: number;
+  dietLabels: string[];
+  healthLabels: string[];
+  ingredientLines: string[];
+  calories: number;
+  totalTime: number; // in minutes
 }
 
-interface Filters {
-  search: string;
-  location: string;
-  selectedSkills: string[];
-  availableOnly: boolean;
+export type MealType = 'Breakfast' | 'Lunch' | 'Dinner';
+export type DayOfWeek = 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
+
+export interface MealPlan {
+  [day: string]: {
+    Breakfast?: Recipe;
+    Lunch?: Recipe;
+    Dinner?: Recipe;
+  };
 }
 
-// --- MOCK DATA ---
-const INITIAL_DEVELOPERS: Developer[] = [
-  {
-    id: '1',
-    name: 'Sarah Jenkins',
-    title: 'Senior Frontend Engineer',
-    location: 'San Francisco, CA',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80',
-    availability: 'Available',
-    skills: ['React', 'TypeScript', 'Tailwind CSS', 'Next.js', 'Framer Motion'],
-    bio: 'Passionate frontend developer focused on building highly interactive, accessible, and performant web applications with modern technologies.',
-    github: 'https://github.com',
-    linkedin: 'https://linkedin.com',
-    portfolio: 'https://example.com',
-    email: 'sarah.j@example.com'
-  },
-  {
-    id: '2',
-    name: 'Marcus Chen',
-    title: 'Full Stack Developer',
-    location: 'Toronto, ON',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80',
-    availability: 'Open to Offers',
-    skills: ['React', 'TypeScript', 'Node.js', 'PostgreSQL', 'GraphQL'],
-    bio: 'Pragmatic software engineer with a focus on writing clean, testable code. Experienced in building scalable APIs and responsive UI systems.',
-    github: 'https://github.com',
-    linkedin: 'https://linkedin.com',
-    email: 'marcus.chen@example.com'
-  },
-  {
-    id: '3',
-    name: 'Elena Rostova',
-    title: 'UI/UX Engineer',
-    location: 'Berlin, DE',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80',
-    availability: 'Busy',
-    skills: ['Figma', 'React', 'Tailwind CSS', 'CSS Grid', 'Three.js'],
-    bio: 'Bridging the gap between beautiful visual designs and functional frontends. Specializing in micro-interactions and motion design.',
-    github: 'https://github.com',
-    portfolio: 'https://example.com',
-    email: 'elena.r@example.com'
-  },
-  {
-    id: '4',
-    name: 'Amara Diallo',
-    title: 'Mobile & Web Developer',
-    location: 'London, UK',
-    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&h=150&q=80',
-    availability: 'Available',
-    skills: ['React', 'React Native', 'TypeScript', 'Tailwind CSS', 'Firebase'],
-    bio: 'Cross-platform app developer. Helping startups turn ideas into live products quickly and efficiently.',
-    github: 'https://github.com',
-    linkedin: 'https://linkedin.com',
-    portfolio: 'https://example.com',
-    email: 'amara@example.com'
-  },
-  {
-    id: '5',
-    name: 'Kenji Takahashi',
-    title: 'Backend Specialist',
-    location: 'Tokyo, JP',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150&q=80',
-    availability: 'Open to Offers',
-    skills: ['Node.js', 'Express', 'TypeScript', 'MongoDB', 'Docker'],
-    bio: 'Designing robust database architectures and APIs. Advocate for serverless technologies and automation pipelines.',
-    github: 'https://github.com',
-    linkedin: 'https://linkedin.com',
-    email: 'kenji@example.com'
-  },
-  {
-    id: '6',
-    name: 'Kenji Erica',
-    title: 'Backend Specialist',
-    location: 'Tokyo, JP',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=150&h=150&q=80',
-    availability: 'Open to Offers',
-    skills: ['Node.js', 'Express', 'TypeScript', 'MongoDB', 'Docker'],
-    bio: 'Designing robust database architectures and APIs. Advocate for serverless technologies and automation pipelines.',
-    github: 'https://github.com',
-    linkedin: 'https://linkedin.com',
-    email: 'kenji@example.com'
-  },
-  {
-    id: '7',
-    name: 'Cisse Diallo',
-    title: 'Mobile Developer',
-    location: 'Darker, Senegal',
-    avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=150&h=150&q=80',
-    availability: 'Available',
-    skills: ['React', 'React Native', 'TypeScript', 'Tailwind CSS', 'Firebase'],
-    bio: 'Cross-platform app developer. Helping startups turn ideas into live products quickly and efficiently.',
-    github: 'https://github.com',
-    linkedin: 'https://linkedin.com',
-    portfolio: 'https://example.com',
-    email: 'amara@example.com'
-  },
-  {
-    id: '8',
-    name: 'Kang Chen',
-    title: 'Full Stack Developer',
-    location: 'Toronto, ON',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80',
-    availability: 'Open to Offers',
-    skills: ['React', 'TypeScript', 'Node.js', 'PostgreSQL', 'GraphQL'],
-    bio: 'Pragmatic software engineer with a focus on writing clean, testable code. Experienced in building scalable APIs and responsive UI systems.',
-    github: 'https://github.com',
-    linkedin: 'https://linkedin.com',
-    email: 'marcus.chen@example.com'
-  },
-  {
-    id: '9',
-    name: 'Marcus Rus',
-    title: 'Full Stack Developer',
-    location: 'Toronto, ON',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=150&h=150&q=80',
-    availability: 'Open to Offers',
-    skills: ['React', 'TypeScript', 'Node.js', 'PostgreSQL', 'GraphQL'],
-    bio: 'Pragmatic software engineer with a focus on writing clean, testable code. Experienced in building scalable APIs and responsive UI systems.',
-    github: 'https://github.com',
-    linkedin: 'https://linkedin.com',
-    email: 'marcus.chen@example.com'
-  },
-  {
-    id: '10',
-    name: 'Sarah Loveth',
-    title: 'Senior Frontend Engineer',
-    location: 'San Francisco, CA',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=150&h=150&q=80',
-    availability: 'Available',
-    skills: ['React', 'TypeScript', 'Tailwind CSS', 'Next.js', 'Framer Motion'],
-    bio: 'Passionate frontend developer focused on building highly interactive, accessible, and performant web applications with modern technologies.',
-    github: 'https://github.com',
-    linkedin: 'https://linkedin.com',
-    portfolio: 'https://example.com',
-    email: 'sarah.j@example.com'
-  },
+interface PlannerContextType {
+  recipes: Recipe[];
+  favorites: Recipe[];
+  mealPlan: MealPlan;
+  shoppingList: string[];
+  apiConfig: { appId: string; appKey: string };
+  isLoading: boolean;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  setApiConfig: (config: { appId: string; appKey: string }) => void;
+  searchRecipes: (ingredients: string) => Promise<void>;
+  toggleFavorite: (recipe: Recipe) => void;
+  addMealToPlan: (day: DayOfWeek, mealType: MealType, recipe: Recipe) => void;
+  removeMealFromPlan: (day: DayOfWeek, mealType: MealType) => void;
+  clearPlan: () => void;
+}
 
-  
+// ==========================================
+// MOCK DATA (Fallback when API credentials aren't set)
+// ==========================================
+
+const MOCK_RECIPES: Recipe[] = [
+  {
+    id: 'mock-1',
+    label: 'Avocado Toast with Poached Eggs',
+    image: 'https://images.unsplash.com/photo-1525351484163-7529414344d8?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3',
+    source: 'Simple Kitchen',
+    url: '#',
+    yield: 2,
+    dietLabels: ['Vegetarian'],
+    healthLabels: ['High-Fiber', 'Low-Sodium'],
+    ingredientLines: ['2 slices sourdough bread', '1 ripe avocado', '2 fresh eggs', 'Red pepper flakes', 'Salt and pepper to taste'],
+    calories: 380,
+    totalTime: 15
+  },
+  {
+    id: 'mock-2',
+    label: 'Mediterranean Quinoa Salad',
+    image: 'https://images.unsplash.com/photo-1505576399279-565b52d4ac71?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3',
+    source: 'Healthy Bites',
+    url: '#',
+    yield: 4,
+    dietLabels: ['Vegetarian', 'Gluten-Free'],
+    healthLabels: ['Low-Fat', 'High-Protein'],
+    ingredientLines: ['1 cup cooked quinoa', '1/2 cup cherry tomatoes', '1/2 cup diced cucumber', '1/4 cup feta cheese', 'Olive oil and lemon dressing'],
+    calories: 290,
+    totalTime: 20
+  },
+  {
+    id: 'mock-3',
+    label: 'Pan-Seared Salmon with Asparagus',
+    image: 'https://images.unsplash.com/photo-1467003909585-2f8a72700288?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3',
+    source: 'Chef Chronicles',
+    url: '#',
+    yield: 2,
+    dietLabels: ['Low-Carb'],
+    healthLabels: ['Keto-Friendly', 'Omega-3 Rich'],
+    ingredientLines: ['2 salmon fillets (6oz each)', '1 bunch fresh asparagus', '2 cloves garlic, minced', '1 tbsp butter', 'Fresh lemon juice'],
+    calories: 450,
+    totalTime: 25
+  },
+  {
+    id: 'mock-4',
+    label: 'Zesty Lemon Herb Chicken',
+    image: 'https://images.unsplash.com/phnpoto-1532550907401-a500c9a57435?w=600&auto=format&fit=crop&q=60&ixlib=rb-4.0.3',
+    source: 'Classic Eats',
+    url: '#',
+    yield: 3,
+    dietLabels: ['High-Protein'],
+    healthLabels: ['Sugar-Conscious'],
+    ingredientLines: ['3 chicken breasts', '2 lemons, zested and juiced', '2 tbsp olive oil', '1 tbsp dried oregano', '3 cloves garlic'],
+    calories: 320,
+    totalTime: 35
+  }
 ];
 
-const ALL_SKILLS = [
-  'React', 'TypeScript', 'Tailwind CSS', 'Framer Motion', 
-  'Next.js', 'Node.js', 'PostgreSQL', 'GraphQL', 
-  'Figma', 'CSS Grid', 'Three.js', 'React Native', 
-  'Firebase', 'Express', 'MongoDB', 'Docker'
-];
+const DAYS_OF_WEEK: DayOfWeek[] = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+const MEAL_TYPES: MealType[] = ['Breakfast', 'Lunch', 'Dinner'];
 
-const LOCATIONS = ['All Locations', 'San Francisco, CA', 'Toronto, ON', 'Berlin, DE', 'London, UK', 'Tokyo, JP'];
+// ==========================================
+// CONTEXT PROVIDER Implementation
+// ==========================================
 
-export default function App() {
-  const [developers, setDevelopers] = useState<Developer[]>(INITIAL_DEVELOPERS);
-  const [selectedDeveloper, setSelectedDeveloper] = useState<Developer | null>(null);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  
-  const [filters, setFilters] = useState<Filters>({
-    search: '',
-    location: 'All Locations',
-    selectedSkills: [],
-    availableOnly: false
+const PlannerContext = createContext<PlannerContextType | undefined>(undefined);
+
+export const PlannerProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [recipes, setRecipes] = useState<Recipe[]>(MOCK_RECIPES);
+  const [favorites, setFavorites] = useState<Recipe[]>([]);
+  const [mealPlan, setMealPlan] = useState<MealPlan>({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [apiConfig, setApiConfig] = useState(() => {
+    const saved = localStorage.getItem('edamam_config');
+    return saved ? JSON.parse(saved) : { appId: '', appKey: '' };
   });
 
-  // --- FILTER LOGIC ---
-  const filteredDevelopers = useMemo(() => {
-    return developers.filter(dev => {
-      const matchesSearch = 
-        dev.name.toLowerCase().includes(filters.search.toLowerCase()) ||
-        dev.title.toLowerCase().includes(filters.search.toLowerCase()) ||
-        dev.bio.toLowerCase().includes(filters.search.toLowerCase());
+  useEffect(() => {
+    localStorage.setItem('edamam_config', JSON.stringify(apiConfig));
+  }, [apiConfig]);
 
-      const matchesLocation = 
-        filters.location === 'All Locations' || dev.location === filters.location;
+  const searchRecipes = async (ingredients: string) => {
+    if (!ingredients.trim()) return;
+    setIsLoading(true);
 
-      const matchesSkills = 
-        filters.selectedSkills.length === 0 || 
-        filters.selectedSkills.every(skill => dev.skills.includes(skill));
+    if (!apiConfig.appId || !apiConfig.appKey) {
+      // Offline fallback search
+      setTimeout(() => {
+        const filtered = MOCK_RECIPES.filter(recipe => 
+          recipe.ingredientLines.some(line => 
+            line.toLowerCase().includes(ingredients.toLowerCase())
+          ) || recipe.label.toLowerCase().includes(ingredients.toLowerCase())
+        );
+        setRecipes(filtered.length > 0 ? filtered : MOCK_RECIPES);
+        setIsLoading(false);
+      }, 600);
+      return;
+    }
 
-      const matchesAvailability = 
-        !filters.availableOnly || dev.availability === 'Available';
+    try {
+      const response = await fetch(
+        `https://api.edamam.com/search?q=${encodeURIComponent(ingredients)}&app_id=${apiConfig.appId}&app_key=${apiConfig.appKey}&from=0&to=12`
+      );
+      if (!response.ok) throw new Error('API request failed');
+      const data = await response.json();
+      
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const formatted: Recipe[] = data.hits.map((hit: any, index: number) => ({
+        id: `edamam-${index}-${hit.recipe.label}`,
+        label: hit.recipe.label,
+        image: hit.recipe.image,
+        source: hit.recipe.source,
+        url: hit.recipe.url,
+        yield: hit.recipe.yield,
+        dietLabels: hit.recipe.dietLabels,
+        healthLabels: hit.recipe.healthLabels,
+        ingredientLines: hit.recipe.ingredientLines,
+        calories: Math.round(hit.recipe.calories),
+        totalTime: hit.recipe.totalTime || 20
+      }));
 
-      return matchesSearch && matchesLocation && matchesSkills && matchesAvailability;
-    });
-  }, [developers, filters]);
-
-  // --- TOGGLE SKILL SELECTION ---
-  const handleSkillToggle = (skill: string) => {
-    setFilters(prev => ({
-      ...prev,
-      selectedSkills: prev.selectedSkills.includes(skill)
-        ? prev.selectedSkills.filter(s => s !== skill)
-        : [...prev.selectedSkills, skill]
-    }));
+      setRecipes(formatted);
+    } catch (error) {
+      console.error('Error fetching recipes:', error);
+      // Fallback on error
+      setRecipes(MOCK_RECIPES);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  // --- ADD NEW DEVELOPER ---
-  const handleAddDeveloper = (newDev: Omit<Developer, 'id'>) => {
-    const id = (developers.length + 1).toString();
-    setDevelopers(prev => [...prev, { ...newDev, id }]);
-  };
-
-  const clearFilters = () => {
-    setFilters({
-      search: '',
-      location: 'All Locations',
-      selectedSkills: [],
-      availableOnly: false
-    });
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 antialiased selection:bg-indigo-100">
-      {/* Header */}
-      <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex items-center gap-2.5">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-md shadow-indigo-100">
-              <span className="font-extrabold text-lg">DF</span>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900">DevFind</h1>
-              <p className="text-xs text-slate-500">Developer Directory</p>
-            </div>
-          </div>
-          
-          <button
-            onClick={() => setIsAddModalOpen(true)}
-            className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 transition duration-150"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Join Directory</span>
-          </button>
-        </div>
-      </header>
-
-      {/* Main Container */}
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-        
-        {/* Hero Section */}
-        <div className="mb-10 text-center md:text-left md:flex md:items-center md:justify-between">
-          <div className="max-w-2xl">
-            <h2 className="text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-              Discover and Connect with Developers
-            </h2>
-            <p className="mt-2 text-base text-slate-600">
-              A curated platform to browse registered software engineers, filterable by locations, engineering skills, and current availability status.
-            </p>
-          </div>
-          <div className="mt-4 md:mt-0 flex gap-4 justify-center md:justify-end text-sm text-slate-600">
-            <div className="rounded-lg bg-white px-4 py-2 shadow-sm border border-slate-100 text-center">
-              <span className="block text-xl font-bold text-slate-900">{developers.length}</span>
-              <span>Registered</span>
-            </div>
-            <div className="rounded-lg bg-white px-4 py-2 shadow-sm border border-slate-100 text-center">
-              <span className="block text-xl font-bold text-green-600">
-                {developers.filter(d => d.availability === 'Available').length}
-              </span>
-              <span>Available Now</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Content Layout */}
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-4">
-          
-          {/* Filters Sidebar */}
-          <aside className="lg:col-span-1 space-y-6">
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-100">
-                <span className="flex items-center gap-2 font-bold text-slate-900">
-                  <Filter className="h-4 w-4 text-slate-500" />
-                  Filters
-                </span>
-                {(filters.search || filters.location !== 'All Locations' || filters.selectedSkills.length > 0 || filters.availableOnly) && (
-                  <button 
-                    onClick={clearFilters}
-                    className="text-xs font-semibold text-indigo-600 hover:text-indigo-800"
-                  >
-                    Clear All
-                  </button>
-                )}
-              </div>
-
-              <div className="space-y-5">
-                {/* Search */}
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Search</label>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Name, title, or bio..."
-                      value={filters.search}
-                      onChange={(e) => setFilters(prev => ({ ...prev, search: e.target.value }))}
-                      className="w-full rounded-lg border border-slate-200 py-2 pl-9 pr-4 text-sm outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Location */}
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">Location</label>
-                  <select
-                    value={filters.location}
-                    onChange={(e) => setFilters(prev => ({ ...prev, location: e.target.value }))}
-                    className="w-full rounded-lg border border-slate-200 bg-white p-2.5 text-sm outline-none transition focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                  >
-                    {LOCATIONS.map(loc => (
-                      <option key={loc} value={loc}>{loc}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Availability Toggle */}
-                <div>
-                  <label className="flex items-center gap-2 cursor-pointer py-1">
-                    <input
-                      type="checkbox"
-                      checked={filters.availableOnly}
-                      onChange={(e) => setFilters(prev => ({ ...prev, availableOnly: e.target.checked }))}
-                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-                    />
-                    <span className="text-sm font-medium text-slate-700">Available for Hire Only</span>
-                  </label>
-                </div>
-
-                {/* Skills Multi-select */}
-                <div>
-                  <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
-                    Skills ({filters.selectedSkills.length})
-                  </label>
-                  <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
-                    {ALL_SKILLS.map(skill => {
-                      const isSelected = filters.selectedSkills.includes(skill);
-                      return (
-                        <button
-                          key={skill}
-                          onClick={() => handleSkillToggle(skill)}
-                          className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition ${
-                            isSelected 
-                              ? 'bg-indigo-600 text-white' 
-                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                          }`}
-                        >
-                          {skill}
-                          {isSelected && <X className="h-3 w-3" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </aside>
-
-          {/* Directory Listings */}
-          <div className="lg:col-span-3">
-            {filteredDevelopers.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-200 bg-white py-16 px-4 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
-                  <Search className="h-6 w-6" />
-                </div>
-                <h3 className="mt-4 text-base font-semibold text-slate-900">No Developers Found</h3>
-                <p className="mt-1 text-sm text-slate-500">
-                  Try adjusting your search query, location filter, or skill tags.
-                </p>
-                <button
-                  onClick={clearFilters}
-                  className="mt-4 rounded-lg bg-indigo-50 px-3 py-2 text-xs font-semibold text-indigo-600 hover:bg-indigo-100 transition"
-                >
-                  Clear Filters
-                </button>
-              </div>
-            ) : (
-              <motion.div 
-                layout 
-                className="grid grid-cols-1 gap-4 sm:grid-cols-2"
-              >
-                <AnimatePresence mode="popLayout">
-                  {filteredDevelopers.map(dev => (
-                    <motion.div
-                      layout
-                      initial={{ opacity: 0, y: 12 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, scale: 0.95 }}
-                      transition={{ duration: 0.2 }}
-                      key={dev.id}
-                      onClick={() => setSelectedDeveloper(dev)}
-                      className="group cursor-pointer rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-slate-300 flex flex-col justify-between"
-                    >
-                      <div>
-                        {/* Status + Avatar */}
-                        <div className="flex items-start justify-between gap-4">
-                          <img 
-                            src={dev.avatar} 
-                            alt={dev.name} 
-                            className="h-12 w-12 rounded-xl object-cover ring-2 ring-slate-100"
-                          />
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                            dev.availability === 'Available' 
-                              ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/10' 
-                              : dev.availability === 'Open to Offers' 
-                              ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/10'
-                              : 'bg-slate-100 text-slate-600 ring-1 ring-slate-500/10'
-                          }`}>
-                            <span className={`h-1.5 w-1.5 rounded-full ${
-                              dev.availability === 'Available' ? 'bg-emerald-500' : dev.availability === 'Open to Offers' ? 'bg-amber-500' : 'bg-slate-400'
-                            }`} />
-                            {dev.availability}
-                          </span>
-                        </div>
-
-                        {/* Title Info */}
-                        <div className="mt-4">
-                          <h3 className="font-bold text-slate-900 group-hover:text-indigo-600 transition">
-                            {dev.name}
-                          </h3>
-                          <p className="text-sm font-medium text-slate-600">{dev.title}</p>
-                          
-                          <div className="mt-2.5 flex items-center gap-1 text-xs text-slate-500">
-                            <MapPin className="h-3.5 w-3.5 flex-shrink-0" />
-                            <span>{dev.location}</span>
-                          </div>
-                        </div>
-
-                        {/* Bio snippet */}
-                        <p className="mt-3 text-xs text-slate-500 line-clamp-2 leading-relaxed">
-                          {dev.bio}
-                        </p>
-                      </div>
-
-                      {/* Skills Snippet */}
-                      <div className="mt-5 pt-4 border-t border-slate-100">
-                        <div className="flex flex-wrap gap-1">
-                          {dev.skills.slice(0, 3).map(skill => (
-                            <span 
-                              key={skill} 
-                              className="inline-flex rounded bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600 ring-1 ring-inset ring-slate-500/10"
-                            >
-                              {skill}
-                            </span>
-                          ))}
-                          {dev.skills.length > 3 && (
-                            <span className="inline-flex items-center rounded bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
-                              +{dev.skills.length - 3} more
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              </motion.div>
-            )}
-          </div>
-
-        </div>
-      </main>
-
-      {/* --- DEVELOPER DETAIL MODAL --- */}
-      <AnimatePresence>
-        {selectedDeveloper && (
-          <React.Fragment>
-            {/* Backdrop */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.4 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSelectedDeveloper(null)}
-              className="fixed inset-0 z-50 bg-slate-900"
-            />
-            {/* Modal Box */}
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 16 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 16 }}
-                transition={{ duration: 0.2 }}
-                className="w-full max-w-xl overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-200"
-              >
-                {/* Header Profile background */}
-                <div className="h-24 bg-gradient-to-r from-indigo-500 to-indigo-800 p-4 flex justify-end">
-                  <button 
-                    onClick={() => setSelectedDeveloper(null)}
-                    className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 text-white backdrop-blur-sm hover:bg-white/30 transition"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-
-                <div className="relative px-6 pb-6">
-                  {/* Absolute positioning of Avatar to overlap the gradient */}
-                  <div className="absolute -top-10 left-6">
-                    <img 
-                      src={selectedDeveloper.avatar} 
-                      alt={selectedDeveloper.name} 
-                      className="h-20 w-20 rounded-2xl object-cover ring-4 ring-white shadow-md"
-                    />
-                  </div>
-
-                  <div className="pt-12">
-                    <div className="flex items-start justify-between gap-4 flex-wrap">
-                      <div>
-                        <h3 className="text-xl font-bold text-slate-900">{selectedDeveloper.name}</h3>
-                        <p className="text-sm font-semibold text-indigo-600">{selectedDeveloper.title}</p>
-                      </div>
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                        selectedDeveloper.availability === 'Available' 
-                          ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/10' 
-                          : selectedDeveloper.availability === 'Open to Offers' 
-                          ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/10'
-                          : 'bg-slate-100 text-slate-600 ring-1 ring-slate-500/10'
-                      }`}>
-                        <span className={`h-1.5 w-1.5 rounded-full ${
-                          selectedDeveloper.availability === 'Available' ? 'bg-emerald-500' : selectedDeveloper.availability === 'Open to Offers' ? 'bg-amber-500' : 'bg-slate-400'
-                        }`} />
-                        {selectedDeveloper.availability}
-                      </span>
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap items-center gap-y-1 gap-x-4 text-xs text-slate-500">
-                      <span className="flex items-center gap-1">
-                        <MapPin className="h-3.5 w-3.5 text-slate-400" />
-                        {selectedDeveloper.location}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Briefcase className="h-3.5 w-3.5 text-slate-400" />
-                        {selectedDeveloper.email}
-                      </span>
-                    </div>
-
-                    <div className="mt-5">
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">About</h4>
-                      <p className="mt-1.5 text-sm text-slate-600 leading-relaxed">
-                        {selectedDeveloper.bio}
-                      </p>
-                    </div>
-
-                    <div className="mt-5">
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Skills & Tech</h4>
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {selectedDeveloper.skills.map(skill => (
-                          <span 
-                            key={skill} 
-                            className="inline-flex rounded bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700"
-                          >
-                            {skill}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Socials / External links */}
-                    <div className="mt-6 pt-5 border-t border-slate-100 flex gap-3">
-                      {selectedDeveloper.github && (
-                        <a 
-                          href={selectedDeveloper.github} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3.5 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
-                        >
-                          <Github className="h-4 w-4" />
-                          GitHub
-                        </a>
-                      )}
-                      {selectedDeveloper.linkedin && (
-                        <a 
-                          href={selectedDeveloper.linkedin} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3.5 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
-                        >
-                          <Linkedin className="h-4 w-4" />
-                          LinkedIn
-                        </a>
-                      )}
-                      {selectedDeveloper.portfolio && (
-                        <a 
-                          href={selectedDeveloper.portfolio} 
-                          target="_blank" 
-                          rel="noreferrer"
-                          className="flex items-center gap-1.5 rounded-lg border border-slate-200 px-3.5 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50 transition"
-                        >
-                          <Globe className="h-4 w-4" />
-                          Portfolio
-                        </a>
-                      )}
-                      <a 
-                        href={`mailto:${selectedDeveloper.email}`}
-                        className="ml-auto flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 shadow-sm transition"
-                      >
-                        Email Developer
-                        <ExternalLink className="h-3.5 w-3.5" />
-                      </a>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-          </React.Fragment>
-        )}
-      </AnimatePresence>
-
-      {/* --- ADD NEW DEVELOPER MODAL --- */}
-      <AnimatePresence>
-        {isAddModalOpen && (
-          <React.Fragment>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.4 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsAddModalOpen(false)}
-              className="fixed inset-0 z-50 bg-slate-900"
-            />
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95, y: 16 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.95, y: 16 }}
-                className="w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-200"
-              >
-                <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-                  <h3 className="font-bold text-slate-900">Add Profile to Directory</h3>
-                  <button 
-                    onClick={() => setIsAddModalOpen(false)}
-                    className="rounded-lg p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
-                </div>
-                
-                <AddDeveloperForm 
-                  onClose={() => setIsAddModalOpen(false)} 
-                  onSubmit={handleAddDeveloper} 
-                />
-              </motion.div>
-            </div>
-          </React.Fragment>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-// --- SUB-COMPONENT: ADD DEVELOPER FORM ---
-interface AddFormProps {
-  onClose: () => void;
-  onSubmit: (dev: Omit<Developer, 'id'>) => void;
-}
-
-function AddDeveloperForm({ onClose, onSubmit }: AddFormProps) {
-  const [name, setName] = useState('');
-  const [title, setTitle] = useState('');
-  const [location, setLocation] = useState('San Francisco, CA');
-  const [availability, setAvailability] = useState<'Available' | 'Busy' | 'Open to Offers'>('Available');
-  const [selectedSkills, setSelectedSkills] = useState<string[]>([]);
-  const [bio, setBio] = useState('');
-  const [email, setEmail] = useState('');
-  
-  const handleToggleFormSkill = (skill: string) => {
-    setSelectedSkills(prev => 
-      prev.includes(skill) ? prev.filter(s => s !== skill) : [...prev, skill]
+  const toggleFavorite = (recipe: Recipe) => {
+    setFavorites(prev => 
+      prev.some(item => item.id === recipe.id)
+        ? prev.filter(item => item.id !== recipe.id)
+        : [...prev, recipe]
     );
   };
 
-  const handleFormSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name || !title || !bio || !email) return;
+  const addMealToPlan = (day: DayOfWeek, mealType: MealType, recipe: Recipe) => {
+    setMealPlan(prev => ({
+      ...prev,
+      [day]: {
+        ...prev[day],
+        [mealType]: recipe
+      }
+    }));
+  };
 
-    // Use placeholder avatar
-    const avatar = `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 1000000)}?auto=format&fit=crop&w=150&h=150&q=80`;
-
-    onSubmit({
-      name,
-      title,
-      location,
-      avatar,
-      availability,
-      skills: selectedSkills.length > 0 ? selectedSkills : ['React'],
-      bio,
-      email,
-      github: 'https://github.com',
-      linkedin: 'https://linkedin.com'
+  const removeMealFromPlan = (day: DayOfWeek, mealType: MealType) => {
+    setMealPlan(prev => {
+      const updatedDay = { ...prev[day] };
+      delete updatedDay[mealType];
+      return {
+        ...prev,
+        [day]: updatedDay
+      };
     });
-    
+  };
+
+  const clearPlan = () => setMealPlan({});
+
+  // Compile active ingredients from current scheduled meals
+  const shoppingList = Object.values(mealPlan).reduce<string[]>((acc, dayMeals) => {
+    if (!dayMeals) return acc;
+    const ingredients: string[] = [];
+    Object.values(dayMeals).forEach(recipe => {
+      if (recipe) {
+        ingredients.push(...recipe.ingredientLines);
+      }
+    });
+    return Array.from(new Set([...acc, ...ingredients]));
+  }, []);
+
+  return (
+    <PlannerContext.Provider value={{
+      recipes,
+      favorites,
+      mealPlan,
+      shoppingList,
+      apiConfig,
+      isLoading,
+      searchQuery,
+      setSearchQuery,
+      setApiConfig,
+      searchRecipes,
+      toggleFavorite,
+      addMealToPlan,
+      removeMealFromPlan,
+      clearPlan
+    }}>
+      {children}
+    </PlannerContext.Provider>
+  );
+};
+
+const usePlanner = () => {
+  const context = useContext(PlannerContext);
+  if (!context) throw new Error('usePlanner must be used within a PlannerProvider');
+  return context;
+};
+
+// ==========================================
+// SUB-COMPONENTS
+// ==========================================
+
+// Config Panel for optional Edamam API connection
+const ApiSettingsModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+  const { apiConfig, setApiConfig } = usePlanner();
+  const [appId, setAppId] = useState(apiConfig.appId);
+  const [appKey, setAppKey] = useState(apiConfig.appKey);
+
+  if (!isOpen) return null;
+
+  const handleSave = () => {
+    setApiConfig({ appId, appKey });
     onClose();
   };
 
   return (
-    <form onSubmit={handleFormSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">Full Name *</label>
-          <input
-            type="text"
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="John Doe"
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500"
-          />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-2xl bg-orange-50 p-6 border-2 border-sky-200 shadow-xl">
+        <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2 mb-2">
+          <Settings className="text-orange-500 h-5 w-5 animate-spin-slow" /> Edamam API Configuration
+        </h3>
+        <p className="text-sm text-slate-600 mb-4">
+          Optional. Provide credentials to query real-time recipes instead of the local culinary dataset.
+        </p>
+        <div className="space-y-3 mb-6">
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Application ID</label>
+            <input 
+              type="text" 
+              className="w-full px-3 py-2 border border-sky-200 rounded-lg focus:ring-2 focus:ring-sky-500 focus:outline-none" 
+              placeholder="e.g. 5e11b83d" 
+              value={appId}
+              onChange={e => setAppId(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1">Application Key</label>
+            <input 
+              type="password" 
+              className="w-full px-3 py-2 border border-sky-200 rounded-lg focus:ring-2 focus:ring-sky-500 focus:outline-none" 
+              placeholder="e.g. 1a679...ef4a2" 
+              value={appKey}
+              onChange={e => setAppKey(e.target.value)}
+            />
+          </div>
         </div>
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">Role Title *</label>
-          <input
-            type="text"
-            required
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Frontend Architect"
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500"
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">Location</label>
-          <select
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
+        <div className="flex gap-2 justify-end">
+          <button 
+            onClick={onClose} 
+            className="px-4 py-2 border border-slate-300 rounded-lg hover:bg-slate-100 transition text-sm font-semibold text-slate-700"
           >
-            {LOCATIONS.filter(loc => loc !== 'All Locations').map(loc => (
-              <option key={loc} value={loc}>{loc}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1">Status</label>
-          <select
-            value={availability}
-            onChange={(e) => setAvailability(e.target.value as never)}
-            className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500"
+            Cancel
+          </button>
+          <button 
+            onClick={handleSave} 
+            className="px-4 py-2 bg-gradient-to-r from-sky-500 to-sky-600 text-white rounded-lg hover:from-sky-600 hover:to-sky-700 transition text-sm font-semibold shadow-md"
           >
-            <option value="Available">Available</option>
-            <option value="Open to Offers">Open to Offers</option>
-            <option value="Busy">Busy</option>
-          </select>
+            Save Settings
+          </button>
         </div>
       </div>
+    </div>
+  );
+};
 
-      <div>
-        <label className="block text-xs font-semibold text-slate-700 mb-1">Email Address *</label>
-        <input
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="yourname@domain.com"
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500"
-        />
+// Recipe Detail Modal with Planner integration
+const RecipeDetailModal: React.FC<{ recipe: Recipe; onClose: () => void }> = ({ recipe, onClose }) => {
+  const { addMealToPlan, favorites, toggleFavorite } = usePlanner();
+  const [selectedDay, setSelectedDay] = useState<DayOfWeek>('Monday');
+  const [selectedMeal, setSelectedMeal] = useState<MealType>('Breakfast');
+  const isFavorite = favorites.some(f => f.id === recipe.id);
+
+  const handleAddToPlan = () => {
+    addMealToPlan(selectedDay, selectedMeal, recipe);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm overflow-y-auto">
+      <div className="relative w-full max-w-2xl rounded-2xl bg-orange-50 border border-orange-200 shadow-2xl overflow-hidden my-8 max-h-[90vh] flex flex-col">
+        
+        {/* Header Image */}
+        <div className="relative h-64 md:h-80 shrink-0">
+          <img src={recipe.image} alt={recipe.label} className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent" />
+          <button 
+            onClick={onClose}
+            className="absolute top-4 right-4 bg-black/60 hover:bg-black/80 text-white p-2 rounded-full transition"
+          >
+            ✕
+          </button>
+          <div className="absolute bottom-4 left-6 right-6 text-white">
+            <span className="text-xs font-semibold px-2.5 py-1 bg-orange-500 rounded-full inline-block mb-2">
+              {recipe.source}
+            </span>
+            <h3 className="text-2xl font-bold leading-tight">{recipe.label}</h3>
+          </div>
+        </div>
+
+        {/* Scrollable Content */}
+        <div className="p-6 overflow-y-auto space-y-6 flex-1">
+          {/* Attributes */}
+          <div className="flex flex-wrap gap-4 text-xs text-slate-600 border-b border-orange-200/60 pb-4">
+            <span className="flex items-center gap-1"><Clock size={15} /> {recipe.totalTime} mins</span>
+            <span>•</span>
+            <span>{recipe.calories} kcal</span>
+            <span>•</span>
+            <span>Serves {recipe.yield}</span>
+          </div>
+
+          <div className="grid md:grid-cols-5 gap-6">
+            {/* Ingredients */}
+            <div className="md:col-span-3">
+              <h4 className="font-bold text-slate-800 text-lg mb-3 flex items-center gap-2">
+                <BookOpen size={18} className="text-orange-500" /> Ingredients
+              </h4>
+              <ul className="space-y-2 text-sm text-slate-700">
+                {recipe.ingredientLines.map((line, index) => (
+                  <li key={index} className="flex items-start gap-2">
+                    <span className="h-1.5 w-1.5 bg-sky-500 rounded-full mt-1.5 shrink-0" />
+                    <span>{line}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Scheduler Widget */}
+            <div className="md:col-span-2 bg-sky-50/60 border border-sky-100 p-4 rounded-xl flex flex-col justify-between">
+              <div>
+                <h4 className="font-bold text-slate-800 text-sm mb-3 uppercase tracking-wider">Schedule Meal</h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Select Day</label>
+                    <select 
+                      value={selectedDay} 
+                      onChange={e => setSelectedDay(e.target.value as DayOfWeek)}
+                      className="w-full p-2 border border-sky-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    >
+                      {DAYS_OF_WEEK.map(day => <option key={day} value={day}>{day}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Select Slot</label>
+                    <select 
+                      value={selectedMeal} 
+                      onChange={e => setSelectedMeal(e.target.value as MealType)}
+                      className="w-full p-2 border border-sky-200 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-sky-500"
+                    >
+                      {MEAL_TYPES.map(meal => <option key={meal} value={meal}>{meal}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="space-y-2 mt-4 pt-4 border-t border-sky-100">
+                <button 
+                  onClick={handleAddToPlan}
+                  className="w-full py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition text-sm font-bold shadow flex items-center justify-center gap-1.5"
+                >
+                  <Plus size={16} /> Add to Week Plan
+                </button>
+                <button 
+                  onClick={() => toggleFavorite(recipe)}
+                  className={`w-full py-2 border rounded-lg text-sm font-semibold transition flex items-center justify-center gap-1.5 ${
+                    isFavorite 
+                      ? 'border-orange-500 bg-orange-100 text-orange-600' 
+                      : 'border-slate-300 hover:bg-slate-100 text-slate-700'
+                  }`}
+                >
+                  <Heart size={16} fill={isFavorite ? 'currentColor' : 'none'} /> 
+                  {isFavorite ? 'Favorited' : 'Bookmark'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Single Recipe Card Component
+const RecipeCard: React.FC<{ recipe: Recipe }> = ({ recipe }) => {
+  const { toggleFavorite, favorites } = usePlanner();
+  const [showDetail, setShowDetail] = useState(false);
+  const isFavorite = favorites.some(f => f.id === recipe.id);
+
+  return (
+    <>
+      <div className="bg-orange-50/80 border border-orange-100 hover:border-orange-200 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition duration-300 flex flex-col justify-between group">
+        <div className="relative overflow-hidden h-44 cursor-pointer" onClick={() => setShowDetail(true)}>
+          <img 
+            src={recipe.image} 
+            alt={recipe.label} 
+            className="w-full h-full object-cover group-hover:scale-105 transition duration-500" 
+          />
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleFavorite(recipe);
+            }}
+            className="absolute top-2 right-2 bg-orange-50/90 hover:bg-orange-100 p-2 rounded-full shadow-sm transition"
+          >
+            <Heart size={16} className={isFavorite ? 'text-orange-500 fill-orange-500' : 'text-slate-400'} />
+          </button>
+        </div>
+        <div className="p-4 flex-1 flex flex-col justify-between">
+          <div className="mb-3 cursor-pointer" onClick={() => setShowDetail(true)}>
+            <span className="text-[10px] font-bold text-sky-600 tracking-wider uppercase">{recipe.source}</span>
+            <h4 className="font-bold text-slate-800 text-base leading-tight mt-1 line-clamp-2 hover:text-sky-600 transition">
+              {recipe.label}
+            </h4>
+          </div>
+          <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-orange-100">
+            <span className="flex items-center gap-1"><Clock size={12} /> {recipe.totalTime}m</span>
+            <span>{recipe.calories} kcal</span>
+            <button 
+              onClick={() => setShowDetail(true)}
+              className="text-orange-600 font-semibold hover:underline flex items-center gap-0.5"
+            >
+              Plan <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      </div>
+      {showDetail && <RecipeDetailModal recipe={recipe} onClose={() => setShowDetail(false)} />}
+    </>
+  );
+};
+
+// ==========================================
+// MAIN WORKSPACE SECTIONS
+// ==========================================
+
+const RecipeDiscovery: React.FC = () => {
+  const { recipes, isLoading, searchRecipes } = usePlanner();
+  const [inputVal, setInputVal] = useState('');
+
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    searchRecipes(inputVal);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-gradient-to-r from-orange-500/10 via-sky-500/10 to-orange-500/10 p-6 rounded-2xl border border-orange-100/50">
+        <h2 className="text-xl font-bold text-slate-800 mb-1">Search & Discover Recipes</h2>
+        <p className="text-slate-600 text-sm mb-4">Input ingredients you have on hand, separating them with commas.</p>
+        <form onSubmit={handleSearchSubmit} className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-3.5 text-slate-400 h-5 w-5" />
+            <input 
+              type="text" 
+              className="w-full pl-10 pr-4 py-3 bg-orange-50 border border-orange-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500 transition shadow-inner text-sm text-slate-800"
+              placeholder="e.g. Avocado, tomato, spinach, garlic..."
+              value={inputVal}
+              onChange={(e) => setInputVal(e.target.value)}
+            />
+          </div>
+          <button 
+            type="submit" 
+            className="px-6 py-3 bg-gradient-to-r from-sky-500 to-sky-600 hover:from-sky-600 hover:to-sky-700 text-white rounded-xl font-semibold shadow-md transition text-sm shrink-0"
+          >
+            Search
+          </button>
+        </form>
       </div>
 
-      <div>
-        <label className="block text-xs font-semibold text-slate-700 mb-1">Bio Description *</label>
-        <textarea
-          required
-          rows={3}
-          value={bio}
-          onChange={(e) => setBio(e.target.value)}
-          placeholder="A brief introduction highlighting your key engineering domains and design patterns..."
-          className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500 resize-none"
-        />
+      {isLoading ? (
+        <div className="flex flex-col items-center justify-center py-16 gap-3">
+          <div className="w-10 h-10 border-4 border-sky-400 border-t-transparent rounded-full animate-spin" />
+          <p className="text-slate-500 text-sm">Harvesting delicious suggestions...</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {recipes.map(recipe => (
+            <RecipeCard key={recipe.id} recipe={recipe} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const WeeklyPlanner: React.FC = () => {
+  const { mealPlan, removeMealFromPlan, clearPlan } = usePlanner();
+
+  const handleRemove = (day: DayOfWeek, mealType: MealType, e: React.MouseEvent) => {
+    e.stopPropagation();
+    removeMealFromPlan(day, mealType);
+  };
+
+  const hasMealsPlanned = Object.values(mealPlan).some(day => day && Object.keys(day).length > 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold text-slate-800">Weekly Meal Calendar</h2>
+          <p className="text-sm text-slate-600">Plan out meals across days to balance your diet.</p>
+        </div>
+        {hasMealsPlanned && (
+          <button 
+            onClick={clearPlan}
+            className="px-3 py-1.5 border border-red-300 text-red-600 hover:bg-red-50 text-xs font-semibold rounded-lg transition"
+          >
+            Reset Week
+          </button>
+        )}
       </div>
 
-      <div>
-        <label className="block text-xs font-semibold text-slate-700 mb-1.5">Select Skills</label>
-        <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto border border-slate-100 p-2 rounded-lg bg-slate-50">
-          {ALL_SKILLS.map(skill => {
-            const active = selectedSkills.includes(skill);
-            return (
-              <button
-                type="button"
-                key={skill}
-                onClick={() => handleToggleFormSkill(skill)}
-                className={`rounded px-2 py-1 text-xs font-medium transition ${
-                  active 
-                    ? 'bg-indigo-600 text-white' 
-                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'
+      <div className="grid grid-cols-1 md:grid-cols-7 gap-4">
+        {DAYS_OF_WEEK.map((day) => {
+          const dayMeals = mealPlan[day] || {};
+          return (
+            <div 
+              key={day} 
+              className="bg-orange-50/70 border border-orange-100 rounded-xl p-3 flex flex-col min-h-[300px] shadow-sm"
+            >
+              <h3 className="font-bold text-slate-700 border-b border-orange-200/50 pb-2 mb-3 text-center text-sm uppercase tracking-wide">
+                {day}
+              </h3>
+              
+              <div className="space-y-3 flex-1 flex flex-col justify-between">
+                {MEAL_TYPES.map((mealType) => {
+                  const meal = dayMeals[mealType];
+                  return (
+                    <div 
+                      key={mealType} 
+                      className={`p-2.5 rounded-lg border text-left transition relative flex flex-col justify-between h-[84px] ${
+                        meal 
+                          ? 'bg-sky-50/80 border-sky-200' 
+                          : 'bg-orange-50 border-orange-100/40 border-dashed hover:border-sky-200'
+                      }`}
+                    >
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase block leading-none mb-1">
+                          {mealType}
+                        </span>
+                        {meal ? (
+                          <h4 className="text-xs font-bold text-slate-800 line-clamp-2 pr-4 leading-snug">
+                            {meal.label}
+                          </h4>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic">No meal set</span>
+                        )}
+                      </div>
+
+                      {meal && (
+                        <button 
+                          onClick={(e) => handleRemove(day, mealType, e)}
+                          className="absolute top-1 right-1 text-slate-400 hover:text-red-500 p-1 rounded-full transition"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const ShoppingList: React.FC = () => {
+  const { shoppingList } = usePlanner();
+  const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
+
+  const toggleItem = (item: string) => {
+    setCheckedItems(prev => ({ ...prev, [item]: !prev[item] }));
+  };
+
+  return (
+    <div className="bg-orange-50/90 border border-orange-100 rounded-2xl p-6 shadow-sm">
+      <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-1">
+        <ShoppingCart className="text-orange-500" size={20} /> Dynamic Shopping List
+      </h2>
+      <p className="text-sm text-slate-600 mb-4">
+        Automatically compiled from recipes designated in your meal calendar.
+      </p>
+
+      {shoppingList.length === 0 ? (
+        <div className="text-center py-10 border border-dashed border-orange-200 rounded-xl bg-orange-100/20">
+          <p className="text-sm text-slate-500">Your shopping list is empty. Add recipes to the Weekly Calendar to construct a list.</p>
+        </div>
+      ) : (
+        <div className="grid md:grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-2">
+          {shoppingList.map((item, index) => (
+            <div 
+              key={index}
+              onClick={() => toggleItem(item)}
+              className="flex items-center gap-3 p-2.5 rounded-lg border border-sky-100 bg-sky-50/40 hover:bg-sky-50 cursor-pointer transition"
+            >
+              <div className={`w-5 h-5 border-2 rounded flex items-center justify-center transition-colors ${
+                checkedItems[item] 
+                  ? 'bg-sky-500 border-sky-500 text-white' 
+                  : 'border-slate-300'
+              }`}>
+                {checkedItems[item] && <Check size={14} />}
+              </div>
+              <span className={`text-sm text-slate-700 transition-all ${
+                checkedItems[item] ? 'line-through text-slate-400' : ''
+              }`}>
+                {item}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ==========================================
+// PARENT LAYOUT & APPLICATION CORE
+// ==========================================
+
+const AppLayout: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<'discover' | 'planner'>('discover');
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+
+  return (
+    // Color Profile: Gradient of Sky Blue elements and soft Orange overlaying a comfortable warm cream canvas
+    <div className="min-h-screen bg-gradient-to-br from-sky-100 via-orange-50 to-sky-100/50 pb-12 font-sans selection:bg-orange-200">
+      
+      {/* Navigation Header */}
+      <header className="sticky top-0 z-30 bg-orange-50/90 backdrop-blur-md border-b border-orange-200/50 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="bg-gradient-to-br from-orange-400 to-orange-500 p-2 rounded-xl text-white shadow">
+              <Calendar className="h-6 w-6" />
+            </div>
+            <div>
+              <h1 className="text-lg font-black text-slate-800 tracking-tight leading-none">DishCraft</h1>
+              <span className="text-[10px] font-semibold text-sky-600 tracking-wider uppercase">Discovery & Meal Prep</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4">
+            <nav className="flex bg-slate-200/50 p-1 rounded-xl">
+              <button 
+                onClick={() => setActiveTab('discover')}
+                className={`px-4 py-2 text-sm font-semibold rounded-lg transition duration-200 flex items-center gap-1.5 ${
+                  activeTab === 'discover' 
+                    ? 'bg-gradient-to-r from-sky-500 to-sky-600 text-white shadow' 
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
-                {skill}
+                <Search size={16} /> Discover
               </button>
-            );
-          })}
-        </div>
-      </div>
+              <button 
+                onClick={() => setActiveTab('planner')}
+                className={`px-4 py-2 text-sm font-semibold rounded-lg transition duration-200 flex items-center gap-1.5 ${
+                  activeTab === 'planner' 
+                    ? 'bg-gradient-to-r from-sky-500 to-sky-600 text-white shadow' 
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Calendar size={16} /> Weekly Plan
+              </button>
+            </nav>
 
-      <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-lg px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 transition"
-        >
-          Add Developer
-        </button>
-      </div>
-    </form>
+            <button 
+              onClick={() => setIsConfigOpen(true)}
+              className="p-2 border border-slate-200 rounded-xl bg-orange-50 hover:bg-slate-100 text-slate-600 transition"
+              title="API Setup"
+            >
+              <Settings size={18} />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content Area */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {activeTab === 'discover' ? <RecipeDiscovery /> : <WeeklyPlanner />}
+        <ShoppingList />
+      </main>
+
+      <ApiSettingsModal isOpen={isConfigOpen} onClose={() => setIsConfigOpen(false)} />
+    </div>
+  );
+};
+
+export default function App() {
+  return (
+    <PlannerProvider>
+      <AppLayout />
+    </PlannerProvider>
   );
 }
 
