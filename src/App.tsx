@@ -1,574 +1,1112 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { useState, useEffect, useMemo } from 'react';
+
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 import { 
-  QueryClient, 
-  QueryClientProvider, 
-  useQuery, 
-  useQueryClient 
-} from '@tanstack/react-query';
-import { 
-  Search, 
-  Star, 
+  CreditCard, 
+  ShieldCheck, 
+  Truck, 
+  ShoppingBag, 
+  CheckCircle, 
+  AlertCircle, 
   RefreshCw, 
-  AlertTriangle, 
-  ArrowUpRight, 
-  ArrowDownRight,
-  BookOpen,
-  ChevronRight,
-  Cpu,
-  Terminal,
-  Database
+  Lock, 
+  ArrowRight, 
+  ArrowLeft,
+  Trash2
 } from 'lucide-react';
 
 // ==========================================
-// 1. DATA TYPES & ARCHITECTURE STRUCTURES
+// TYPES & INTERFACES
 // ==========================================
 
-export interface CoinData {
+export interface CartItem {
   id: string;
-  symbol: string;
   name: string;
-  current_price: number;
-  market_cap: number;
-  price_change_percentage_24h: number;
-  last_updated: string;
+  price: number;
+  quantity: number;
+  image: string;
 }
 
-interface QueueItem {
+export interface ShippingAddress {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  state: string;
+  zipCode: string;
+  country: string;
+}
+
+export interface CardDetails {
+  cardholderName: string;
+  cardNumber: string;
+  expiryDate: string; // MM/YY
+  cvv: string;
+}
+
+export interface ShippingMethod {
   id: string;
-  url: string;
-  resolve: (value: any) => void;
-  reject: (reason: any) => void;
-  timestamp: number;
+  name: string;
+  description: string;
+  cost: number;
+  estimatedDays: string;
+}
+
+export type CheckoutStep = 'shipping' | 'delivery' | 'payment' | 'confirmation';
+
+export interface ValidationErrors {
+  [key: string]: string;
+}
+
+interface CheckoutContextType {
+  step: CheckoutStep;
+  cartItems: CartItem[];
+  shippingAddress: ShippingAddress;
+  shippingMethods: ShippingMethod[];
+  selectedShippingMethod: ShippingMethod;
+  paymentToken: string | null;
+  isTokenizing: boolean;
+  isSubmitting: boolean;
+  validationErrors: ValidationErrors;
+  draftRestored: boolean;
+  clearDraftRestoredAlert: () => void;
+  setStep: (step: CheckoutStep) => void;
+  updateShippingAddress: (address: Partial<ShippingAddress>) => void;
+  setSelectedShippingMethod: (method: ShippingMethod) => void;
+  handleCardTokenization: (cardDetails: CardDetails) => Promise<boolean>;
+  submitOrder: () => Promise<void>;
+  resetCheckout: () => void;
 }
 
 // ==========================================
-// 2. RESILIENT CLIENT-SIDE REQUEST SCHEDULER
+// STATIC/MOCK DATA
 // ==========================================
 
-class ClientSideRateLimitInterceptor {
-  private queue: QueueItem[] = [];
-  private processing = false;
-  private minIntervalMs = 1500; // Delay enforced between client requests to prevent 429s
-  private onQueueUpdate: (queueLength: number) => void = () => {};
-  private onLogUpdate: (message: string) => void = () => {};
-
-  public registerCallbacks(
-    onQueueUpdate: (queueLength: number) => void,
-    onLogUpdate: (message: string) => void
-  ) {
-    this.onQueueUpdate = onQueueUpdate;
-    this.onLogUpdate = onLogUpdate;
+const MOCK_CART: CartItem[] = [
+  {
+    id: 'prod_01',
+    name: 'Modular Mechanical Keyboard (75% Layout)',
+    price: 189.99,
+    quantity: 1,
+    image: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=150&auto=format&fit=crop&q=60&ixlib=rb-4.0.3'
+  },
+  {
+    id: 'prod_02',
+    name: 'Precision Ergonomic Wireless Mouse',
+    price: 89.50,
+    quantity: 1,
+    image: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=150&auto=format&fit=crop&q=60&ixlib=rb-4.0.3'
   }
+];
 
-  /**
-   * Schedules a fetch request through the client-side queue.
-   */
-  public async fetchResilient(url: string, simulateFailures: boolean): Promise<any> {
-    return new Promise((resolve, reject) => {
-      const item: QueueItem = {
-        id: Math.random().toString(36).substring(2, 9),
-        url,
-        resolve,
-        reject,
-        timestamp: Date.now(),
-      };
-      this.queue.push(item);
-      this.onQueueUpdate(this.queue.length);
-      this.onLogUpdate(`Enqueued: fetch('${url.split('/').pop()}')`);
-      this.processQueue(simulateFailures);
-    });
+const SHIPPING_METHODS: ShippingMethod[] = [
+  { id: 'standard', name: 'Standard Ground', description: 'Reliable parcel delivery', cost: 4.99, estimatedDays: '3-5 business days' },
+  { id: 'express', name: 'Express Delivery', description: 'Expedited shipping to your door', cost: 15.00, estimatedDays: '1-2 business days' },
+  { id: 'overnight', name: 'Priority Overnight', description: 'Next-day delivery by noon', cost: 35.00, estimatedDays: 'Next business day' }
+];
+
+const STORAGE_KEYS = {
+  SHIPPING_DRAFT: 'checkout_pipeline_shipping_draft',
+  SHIPPING_METHOD_DRAFT: 'checkout_pipeline_method_draft',
+  STEP_DRAFT: 'checkout_pipeline_step_draft'
+};
+
+// Luhn Algorithm helper for credit card numbers (client validation)
+const validateLuhn = (cardNumber: string): boolean => {
+  const cleanNum = cardNumber.replace(/\D/g, '');
+  if (!cleanNum) return false;
+  let sum = 0;
+  let shouldDouble = false;
+  for (let i = cleanNum.length - 1; i >= 0; i--) {
+    let digit = parseInt(cleanNum.charAt(i), 10);
+    if (shouldDouble) {
+      if ((digit *= 2) > 9) digit -= 9;
+    }
+    sum += digit;
+    shouldDouble = !shouldDouble;
   }
+  return sum % 10 === 0;
+};
 
-  private async processQueue(simulateFailures: boolean) {
-    if (this.processing || this.queue.length === 0) return;
-    this.processing = true;
+// ==========================================
+// CONTEXT IMPLEMENTATION
+// ==========================================
 
-    const currentTask = this.queue[0];
-    this.onLogUpdate(`Processing request task: ${currentTask.id}`);
+const CheckoutContext = createContext<CheckoutContextType | undefined>(undefined);
 
+export const CheckoutProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [step, setStepState] = useState<CheckoutStep>('shipping');
+  const [shippingAddress, setShippingAddress] = useState<ShippingAddress>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    addressLine1: '',
+    addressLine2: '',
+    city: '',
+    state: '',
+    zipCode: '',
+    country: 'United States'
+  });
+  const [selectedShippingMethod, setSelectedShippingMethodState] = useState<ShippingMethod>(SHIPPING_METHODS[0]);
+  const [paymentToken, setPaymentToken] = useState<string | null>(null);
+  const [isTokenizing, setIsTokenizing] = useState<boolean>(false);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [validationErrors, setValidationErrors] = useState<ValidationErrors>({});
+  const [draftRestored, setDraftRestored] = useState<boolean>(false);
+
+  // Load drafts on mount - excluding sensitive details to maintain security controls
+  useEffect(() => {
     try {
-      const data = await this.executeFetch(currentTask.url, simulateFailures);
-      currentTask.resolve(data);
-      this.queue.shift();
-      this.onQueueUpdate(this.queue.length);
-      this.onLogUpdate(`Resolved task: ${currentTask.id}`);
-    
-    } catch (error: any) {
-      this.onLogUpdate(`HTTP 429 Intercepted. Executing delay buffer...`);
-      // Hold task, wait for cooloff before retry
-      await new Promise((res) => setTimeout(res, 2000));
-      currentTask.reject(error);
-      this.queue.shift();
-      this.onQueueUpdate(this.queue.length);
-    } finally {
-      this.processing = false;
+      const savedShipping = localStorage.getItem(STORAGE_KEYS.SHIPPING_DRAFT);
+      const savedMethod = localStorage.getItem(STORAGE_KEYS.SHIPPING_METHOD_DRAFT);
+      const savedStep = localStorage.getItem(STORAGE_KEYS.STEP_DRAFT);
       
-      // Delay processing the next queue item to respect public API thresholds
-      if (this.queue.length > 0) {
-        this.onLogUpdate(`Pausing ${this.minIntervalMs}ms spacing...`);
-        setTimeout(() => this.processQueue(simulateFailures), this.minIntervalMs);
+      let restored = false;
+
+      if (savedShipping) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setShippingAddress(JSON.parse(savedShipping));
+        restored = true;
+      }
+      if (savedMethod) {
+        const foundMethod = SHIPPING_METHODS.find(m => m.id === savedMethod);
+        if (foundMethod) {
+          setSelectedShippingMethodState(foundMethod);
+          restored = true;
+        }
+      }
+      if (savedStep && savedStep !== 'confirmation') {
+        setStepState(savedStep as CheckoutStep);
+        restored = true;
+      }
+
+      if (restored) {
+        setDraftRestored(true);
+      }
+    } catch (e) {
+      console.warn('Failed to restore draft state', e);
+    }
+  }, []);
+
+  // Save draft state (non-sensitive progress information only)
+  const setStep = (nextStep: CheckoutStep) => {
+    setStepState(nextStep);
+    localStorage.setItem(STORAGE_KEYS.STEP_DRAFT, nextStep);
+  };
+
+  const updateShippingAddress = (addressUpdates: Partial<ShippingAddress>) => {
+    setShippingAddress(prev => {
+      const updated = { ...prev, ...addressUpdates };
+      localStorage.setItem(STORAGE_KEYS.SHIPPING_DRAFT, JSON.stringify(updated));
+      return updated;
+    });
+    // Clear field-specific validation warning when fixed
+    const keys = Object.keys(addressUpdates);
+    if (keys.length > 0) {
+      setValidationErrors(prev => {
+        const next = { ...prev };
+        keys.forEach(k => delete next[k]);
+        return next;
+      });
+    }
+  };
+
+  const setSelectedShippingMethod = (method: ShippingMethod) => {
+    setSelectedShippingMethodState(method);
+    localStorage.setItem(STORAGE_KEYS.SHIPPING_METHOD_DRAFT, method.id);
+  };
+
+  const clearDraftRestoredAlert = () => setDraftRestored(false);
+
+  // Client-Side Secure Card Tokenization Simulation
+  // Securely receives raw card details, contacts server/processor simulation, returns opaque payment token, 
+  // and completely avoids storing credit card values in component state or browser localStorage
+  const handleCardTokenization = async (cardDetails: CardDetails): Promise<boolean> => {
+    setIsTokenizing(true);
+    setValidationErrors({});
+    
+    // Simulate slight network latency to tokenize payment credentials
+    await new Promise(resolve => setTimeout(resolve, 1800));
+
+    const errors: ValidationErrors = {};
+    if (!cardDetails.cardholderName.trim()) {
+      errors.cardholderName = 'Cardholder name is required.';
+    }
+    
+    const plainCardNumber = cardDetails.cardNumber.replace(/\s+/g, '');
+    if (!plainCardNumber || plainCardNumber.length < 13 || plainCardNumber.length > 19) {
+      errors.cardNumber = 'Card number must be between 13 and 19 digits.';
+    } else if (!validateLuhn(plainCardNumber)) {
+      errors.cardNumber = 'Invalid credit card number (failed checksum validation).';
+    }
+
+    const expiryMatch = cardDetails.expiryDate.match(/^(0[1-9]|1[0-2])\/([0-9]{2})$/);
+    if (!expiryMatch) {
+      errors.expiryDate = 'Format must be MM/YY.';
+    } else {
+      const month = parseInt(expiryMatch[1], 10);
+      const year = parseInt('20' + expiryMatch[2], 10);
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth() + 1;
+      
+      if (year < currentYear || (year === currentYear && month < currentMonth)) {
+        errors.expiryDate = 'Card expiration date has passed.';
       }
     }
-  }
 
-  private async executeFetch(_url: string, simulateFailures: boolean): Promise<CoinData[]> {
-    if (simulateFailures && Math.random() < 0.3) {
-      throw new Error("HTTP 429: Too Many Requests (Simulated)");
+    if (!cardDetails.cvv || cardDetails.cvv.length < 3 || cardDetails.cvv.length > 4) {
+      errors.cvv = 'CVV must be 3 or 4 digits.';
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setValidationErrors(errors);
+      setIsTokenizing(false);
+      return false;
+    }
+
+    // Mock response of client-side tokenization (like Stripe.js elements or Braintree)
+    // The key objective is to never persist the raw card properties in local state or browser storage.
+    const last4 = plainCardNumber.slice(-4);
+    const mockToken = `tok_client_${Math.random().toString(36).substring(2, 14)}_${last4}`;
+    
+    setPaymentToken(mockToken);
+    setIsTokenizing(false);
+    return true;
+  };
+
+  const submitOrder = async () => {
+    setIsSubmitting(true);
+    // Simulate API request to capture stateful token and finalize transaction
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Clean up all localized draft states upon successful order execution
+    localStorage.removeItem(STORAGE_KEYS.SHIPPING_DRAFT);
+    localStorage.removeItem(STORAGE_KEYS.SHIPPING_METHOD_DRAFT);
+    localStorage.removeItem(STORAGE_KEYS.STEP_DRAFT);
+    
+    setIsSubmitting(false);
+    setStep('confirmation');
+  };
+
+  const resetCheckout = () => {
+    setStepState('shipping');
+    setShippingAddress({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      addressLine1: '',
+      addressLine2: '',
+      city: '',
+      state: '',
+      zipCode: '',
+      country: 'United States'
+    });
+    setSelectedShippingMethodState(SHIPPING_METHODS[0]);
+    setPaymentToken(null);
+    setValidationErrors({});
+    setDraftRestored(false);
+    localStorage.removeItem(STORAGE_KEYS.SHIPPING_DRAFT);
+    localStorage.removeItem(STORAGE_KEYS.SHIPPING_METHOD_DRAFT);
+    localStorage.removeItem(STORAGE_KEYS.STEP_DRAFT);
+  };
+
+  return (
+    <CheckoutContext.Provider value={{
+      step,
+      cartItems: MOCK_CART,
+      shippingAddress,
+      shippingMethods: SHIPPING_METHODS,
+      selectedShippingMethod,
+      paymentToken,
+      isTokenizing,
+      isSubmitting,
+      validationErrors,
+      draftRestored,
+      clearDraftRestoredAlert,
+      setStep,
+      updateShippingAddress,
+      setSelectedShippingMethod,
+      handleCardTokenization,
+      submitOrder,
+      resetCheckout
+    }}>
+      {children}
+    </CheckoutContext.Provider>
+  );
+};
+
+const useCheckout = () => {
+  const context = useContext(CheckoutContext);
+  if (context === undefined) {
+    throw new Error('useCheckout must be used within a CheckoutProvider');
+  }
+  return context;
+};
+
+// ==========================================
+// SUB-COMPONENTS
+// ==========================================
+
+const ProgressBar: React.FC = () => {
+  const { step } = useCheckout();
+  
+  const stepsList: { key: CheckoutStep; label: string }[] = [
+    { key: 'shipping', label: 'Shipping Info' },
+    { key: 'delivery', label: 'Delivery Method' },
+    { key: 'payment', label: 'Payment Details' },
+    { key: 'confirmation', label: 'Complete Order' }
+  ];
+
+  const getStepIndex = (s: CheckoutStep) => {
+    const indices: Record<CheckoutStep, number> = { shipping: 0, delivery: 1, payment: 2, confirmation: 3 };
+    return indices[s];
+  };
+
+  const activeIndex = getStepIndex(step);
+
+  return (
+    <div className="w-full py-4 mb-8">
+      <div className="flex items-center justify-between">
+        {stepsList.map((item, idx) => {
+          const isCompleted = idx < activeIndex;
+          const isActive = idx === activeIndex;
+          
+          return (
+            <React.Fragment key={item.key}>
+              <div className="flex flex-col items-center flex-1 relative">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold z-10 transition-all duration-300 ${
+                  isCompleted 
+                    ? 'bg-emerald-600 text-white' 
+                    : isActive 
+                    ? 'bg-slate-900 text-white ring-4 ring-slate-100 dark:ring-slate-800' 
+                    : 'bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-500'
+                }`}>
+                  {isCompleted ? <CheckCircle className="w-5 h-5" /> : idx + 1}
+                </div>
+                <span className={`text-[11px] font-medium mt-2 whitespace-nowrap hidden sm:block ${
+                  isActive ? 'text-slate-900 font-semibold dark:text-slate-100' : 'text-slate-400 dark:text-slate-500'
+                }`}>
+                  {item.label}
+                </span>
+              </div>
+              
+              {idx < stepsList.length - 1 && (
+                <div className="flex-1 h-0.5 mx-1 bg-slate-100 dark:bg-slate-800 relative">
+                  <div 
+                    className="absolute top-0 left-0 h-full bg-emerald-600 transition-all duration-500"
+                    style={{ width: isCompleted ? '100%' : '0%' }}
+                  />
+                </div>
+              )}
+            </React.Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+const OrderSummary: React.FC = () => {
+  const { cartItems, selectedShippingMethod, step } = useCheckout();
+
+  const subtotal = useMemo(() => {
+    return cartItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+  }, [cartItems]);
+
+  const tax = useMemo(() => {
+    return subtotal * 0.0825; // 8.25% mock sales tax
+  }, [subtotal]);
+
+  const shippingCost = useMemo(() => {
+    if (step === 'shipping') return 0;
+    return selectedShippingMethod.cost;
+  }, [selectedShippingMethod, step]);
+
+  const grandTotal = useMemo(() => {
+    return subtotal + tax + shippingCost;
+  }, [subtotal, tax, shippingCost]);
+
+  return (
+    <div className="bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800/60 rounded-xl p-5 sticky top-6">
+      <div className="flex items-center gap-2 pb-4 mb-4 border-b border-slate-200 dark:border-slate-800">
+        <ShoppingBag className="w-5 h-5 text-slate-500" />
+        <h3 className="font-semibold text-slate-900 dark:text-white">Order Summary</h3>
+      </div>
+
+      <div className="space-y-4 max-h-60 overflow-y-auto mb-4 pr-1">
+        {cartItems.map((item) => (
+          <div key={item.id} className="flex gap-3 text-sm">
+            <img 
+              src={item.image} 
+              alt={item.name} 
+              className="w-12 h-12 object-cover rounded-md border border-slate-200 dark:border-slate-800 bg-white" 
+            />
+            <div className="flex-1 min-w-0">
+              <h4 className="font-medium text-slate-800 dark:text-slate-200 truncate">{item.name}</h4>
+              <p className="text-slate-400 text-xs">Qty: {item.quantity}</p>
+            </div>
+            <div className="text-right">
+              <span className="font-medium text-slate-800 dark:text-slate-200">${item.price.toFixed(2)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="border-t border-slate-200 dark:border-slate-800 pt-4 space-y-2 text-sm text-slate-600 dark:text-slate-400">
+        <div className="flex justify-between">
+          <span>Subtotal</span>
+          <span className="font-medium text-slate-800 dark:text-slate-200">${subtotal.toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Estimated Sales Tax</span>
+          <span className="font-medium text-slate-800 dark:text-slate-200">${tax.toFixed(2)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span>Shipping {step === 'shipping' && <span className="text-[10px] text-slate-400">(calc next step)</span>}</span>
+          <span className="font-medium text-slate-800 dark:text-slate-200">
+            {step === 'shipping' ? '--' : `$${shippingCost.toFixed(2)}`}
+          </span>
+        </div>
+        
+        <div className="border-t border-slate-200 dark:border-slate-800 pt-3 flex justify-between text-base font-semibold text-slate-900 dark:text-white">
+          <span>Total</span>
+          <span>${grandTotal.toFixed(2)}</span>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-center gap-1.5 text-xs text-slate-400 bg-slate-100 dark:bg-slate-800/40 py-2 rounded-lg">
+        <Lock className="w-3.5 h-3.5" />
+        <span>Secure 256-bit SSL encrypted pipeline</span>
+      </div>
+    </div>
+  );
+};
+
+const ShippingForm: React.FC = () => {
+  const { shippingAddress, updateShippingAddress, setStep } = useCheckout();
+  const [formErrors, setFormErrors] = useState<ValidationErrors>({});
+
+  const validateFields = (): boolean => {
+    const errors: ValidationErrors = {};
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    
+    if (!shippingAddress.firstName.trim()) errors.firstName = 'Required';
+    if (!shippingAddress.lastName.trim()) errors.lastName = 'Required';
+    if (!shippingAddress.addressLine1.trim()) errors.addressLine1 = 'Required';
+    if (!shippingAddress.city.trim()) errors.city = 'Required';
+    if (!shippingAddress.state.trim()) errors.state = 'Required';
+    if (!shippingAddress.zipCode.trim()) {
+      errors.zipCode = 'Required';
+    } else if (shippingAddress.zipCode.length < 5) {
+      errors.zipCode = 'Min 5 digits';
     }
     
-    // Fallback Mock Data Engine to ensure persistent uptime and predictable testing
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        resolve(this.generateMockCryptoData());
-      }, 400); // Artificial latency simulation
+    if (!shippingAddress.email.trim()) {
+      errors.email = 'Required';
+    } else if (!emailRegex.test(shippingAddress.email)) {
+      errors.email = 'Invalid email';
+    }
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleNext = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (validateFields()) {
+      setStep('delivery');
+    }
+  };
+
+  return (
+    <form onSubmit={handleNext} className="space-y-4">
+      <div className="flex items-center gap-2 mb-2">
+        <Truck className="w-5 h-5 text-slate-700 dark:text-slate-300" />
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Shipping Address Details</h2>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">First Name *</label>
+          <input
+            type="text"
+            className={`w-full bg-white dark:bg-slate-950 border text-sm rounded-lg px-3 py-2.5 outline-none transition-colors ${
+              formErrors.firstName ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-300'
+            }`}
+            value={shippingAddress.firstName}
+            onChange={(e) => updateShippingAddress({ firstName: e.target.value })}
+            placeholder="Jane"
+          />
+          {formErrors.firstName && <p className="text-rose-500 text-xs mt-1">{formErrors.firstName}</p>}
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Last Name *</label>
+          <input
+            type="text"
+            className={`w-full bg-white dark:bg-slate-950 border text-sm rounded-lg px-3 py-2.5 outline-none transition-colors ${
+              formErrors.lastName ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-300'
+            }`}
+            value={shippingAddress.lastName}
+            onChange={(e) => updateShippingAddress({ lastName: e.target.value })}
+            placeholder="Doe"
+          />
+          {formErrors.lastName && <p className="text-rose-500 text-xs mt-1">{formErrors.lastName}</p>}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Email Address *</label>
+          <input
+            type="email"
+            className={`w-full bg-white dark:bg-slate-950 border text-sm rounded-lg px-3 py-2.5 outline-none transition-colors ${
+              formErrors.email ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-300'
+            }`}
+            value={shippingAddress.email}
+            onChange={(e) => updateShippingAddress({ email: e.target.value })}
+            placeholder="jane.doe@example.com"
+          />
+          {formErrors.email && <p className="text-rose-500 text-xs mt-1">{formErrors.email}</p>}
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Phone Number</label>
+          <input
+            type="tel"
+            className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-sm rounded-lg px-3 py-2.5 outline-none focus:border-slate-900 dark:focus:border-slate-300"
+            value={shippingAddress.phone}
+            onChange={(e) => updateShippingAddress({ phone: e.target.value })}
+            placeholder="+1 (555) 019-2834"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Address Line 1 *</label>
+        <input
+          type="text"
+          className={`w-full bg-white dark:bg-slate-950 border text-sm rounded-lg px-3 py-2.5 outline-none transition-colors ${
+            formErrors.addressLine1 ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-300'
+          }`}
+          value={shippingAddress.addressLine1}
+          onChange={(e) => updateShippingAddress({ addressLine1: e.target.value })}
+          placeholder="123 High Street"
+        />
+        {formErrors.addressLine1 && <p className="text-rose-500 text-xs mt-1">{formErrors.addressLine1}</p>}
+      </div>
+
+      <div>
+        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Address Line 2 (Optional)</label>
+        <input
+          type="text"
+          className="w-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-sm rounded-lg px-3 py-2.5 outline-none focus:border-slate-900 dark:focus:border-slate-300"
+          value={shippingAddress.addressLine2 || ''}
+          onChange={(e) => updateShippingAddress({ addressLine2: e.target.value })}
+          placeholder="Apt 4B"
+        />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">City *</label>
+          <input
+            type="text"
+            className={`w-full bg-white dark:bg-slate-950 border text-sm rounded-lg px-3 py-2.5 outline-none transition-colors ${
+              formErrors.city ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-300'
+            }`}
+            value={shippingAddress.city}
+            onChange={(e) => updateShippingAddress({ city: e.target.value })}
+            placeholder="San Francisco"
+          />
+          {formErrors.city && <p className="text-rose-500 text-xs mt-1">{formErrors.city}</p>}
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">State / Region *</label>
+          <input
+            type="text"
+            className={`w-full bg-white dark:bg-slate-950 border text-sm rounded-lg px-3 py-2.5 outline-none transition-colors ${
+              formErrors.state ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-300'
+            }`}
+            value={shippingAddress.state}
+            onChange={(e) => updateShippingAddress({ state: e.target.value })}
+            placeholder="CA"
+          />
+          {formErrors.state && <p className="text-rose-500 text-xs mt-1">{formErrors.state}</p>}
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">ZIP / Postal Code *</label>
+          <input
+            type="text"
+            className={`w-full bg-white dark:bg-slate-950 border text-sm rounded-lg px-3 py-2.5 outline-none transition-colors ${
+              formErrors.zipCode ? 'border-rose-500 focus:border-rose-500' : 'border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-300'
+            }`}
+            value={shippingAddress.zipCode}
+            onChange={(e) => updateShippingAddress({ zipCode: e.target.value })}
+            placeholder="94105"
+          />
+          {formErrors.zipCode && <p className="text-rose-500 text-xs mt-1">{formErrors.zipCode}</p>}
+        </div>
+      </div>
+
+      <div className="pt-4 flex justify-end">
+        <button
+          type="submit"
+          className="flex items-center gap-1.5 bg-slate-900 dark:bg-slate-100 hover:bg-slate-850 dark:hover:bg-slate-200 text-white dark:text-slate-950 text-sm font-medium py-2.5 px-5 rounded-lg transition-colors"
+        >
+          <span>Continue to Delivery</span>
+          <ArrowRight className="w-4 h-4" />
+        </button>
+      </div>
+    </form>
+  );
+};
+
+const DeliveryMethodForm: React.FC = () => {
+  const { shippingMethods, selectedShippingMethod, setSelectedShippingMethod, setStep } = useCheckout();
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
+          <Truck className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+          Choose Shipping Speed
+        </h2>
+        <p className="text-xs text-slate-500">Please choose a preferred delivery method for your shipment.</p>
+      </div>
+
+      <div className="space-y-3">
+        {shippingMethods.map((method) => {
+          const isSelected = selectedShippingMethod.id === method.id;
+          return (
+            <label 
+              key={method.id}
+              className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition-all ${
+                isSelected 
+                  ? 'border-slate-900 bg-slate-50/50 dark:border-slate-100 dark:bg-slate-900/30' 
+                  : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <input 
+                  type="radio" 
+                  name="shippingMethod" 
+                  className="mt-1 h-4 w-4 text-slate-900 dark:text-slate-100 border-slate-350 focus:ring-0 accent-slate-900 dark:accent-slate-100"
+                  checked={isSelected}
+                  onChange={() => setSelectedShippingMethod(method)}
+                />
+                <div>
+                  <span className="block text-sm font-semibold text-slate-800 dark:text-slate-200">{method.name}</span>
+                  <span className="block text-xs text-slate-500">{method.description} • {method.estimatedDays}</span>
+                </div>
+              </div>
+              <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                {method.cost === 0 ? 'Free' : `$${method.cost.toFixed(2)}`}
+              </span>
+            </label>
+          );
+        })}
+      </div>
+
+      <div className="pt-4 flex justify-between">
+        <button
+          type="button"
+          onClick={() => setStep('shipping')}
+          className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-sm font-medium py-2.5 px-4 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back</span>
+        </button>
+        
+        <button
+          type="button"
+          onClick={() => setStep('payment')}
+          className="flex items-center gap-1.5 bg-slate-900 dark:bg-slate-100 hover:bg-slate-850 dark:hover:bg-slate-200 text-white dark:text-slate-950 text-sm font-medium py-2.5 px-5 rounded-lg transition-colors"
+        >
+          <span>Continue to Payment</span>
+          <ArrowRight className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const PaymentForm: React.FC = () => {
+  const { 
+    handleCardTokenization, 
+    paymentToken, 
+    isTokenizing, 
+    isSubmitting, 
+    submitOrder, 
+    validationErrors, 
+    setStep 
+  } = useCheckout();
+
+  // Local card states are ONLY used inside this transient form block. 
+  // Under no circumstance do we lift raw card states up to persistent stores or localStorage.
+  const [cardholderName, setCardholderName] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [expiryDate, setExpiryDate] = useState('');
+  const [cvv, setCvv] = useState('');
+
+  // Handle format spacing for visual card typing ease
+  const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawVal = e.target.value.replace(/\D/g, '');
+    const chunked = rawVal.match(/.{1,4}/g);
+    setCardNumber(chunked ? chunked.slice(0, 4).join(' ') : rawVal);
+  };
+
+  const handleExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let cleanVal = e.target.value.replace(/\D/g, '');
+    if (cleanVal.length > 2) {
+      cleanVal = `${cleanVal.slice(0, 2)}/${cleanVal.slice(2, 4)}`;
+    }
+    setExpiryDate(cleanVal.slice(0, 5));
+  };
+
+  const handleCvvChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const cleanVal = e.target.value.replace(/\D/g, '');
+    setCvv(cleanVal.slice(0, 4));
+  };
+
+  const onTokenizeAndPay = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // 1. Exchange raw details for token securely
+    const success = await handleCardTokenization({
+      cardholderName,
+      cardNumber,
+      expiryDate,
+      cvv
     });
-  }
 
-  private generateMockCryptoData(): CoinData[] {
-    const basePrices: Record<string, number> = {
-      bitcoin: 64250,
-      ethereum: 3450,
-      solana: 142,
-      cardano: 0.48,
-      ripple: 0.52,
-      polkadot: 6.20,
-      dogecoin: 0.12,
-      chainlink: 14.80
-    };
+    if (success) {
+      // 2. Erase volatile UI details immediately once tokenized successfully
+      setCardholderName('');
+      setCardNumber('');
+      setExpiryDate('');
+      setCvv('');
+    }
+  };
 
-    return Object.entries(basePrices).map(([id, price]) => {
-      const changePercent = (Math.random() * 4) - 2; 
-      const newPrice = price * (1 + changePercent / 100);
-      return {
-        id,
-        symbol: id.substring(0, 3).toUpperCase(),
-        name: id.charAt(0).toUpperCase() + id.slice(1),
-        current_price: parseFloat(newPrice.toFixed(2)),
-        market_cap: Math.round(newPrice * 18000000),
-        price_change_percentage_24h: parseFloat(changePercent.toFixed(2)),
-        last_updated: new Date().toISOString()
-      };
-    });
-  }
-}
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
+          <CreditCard className="w-5 h-5 text-slate-600 dark:text-slate-400" />
+          Secure Payment Portal
+        </h2>
+        <p className="text-xs text-slate-500">
+          State retention systems protect basic form input. Your critical card details are tokenized on demand and excluded from persistent browser memory.
+        </p>
+      </div>
 
-// Global Singleton Instance of Queue Interceptor
-const apiInterceptor = new ClientSideRateLimitInterceptor();
+      {paymentToken ? (
+        <div className="bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 rounded-xl p-4 space-y-3">
+          <div className="flex gap-2.5">
+            <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <div>
+              <h4 className="text-sm font-semibold text-emerald-800 dark:text-emerald-400">Card Securely Tokenized</h4>
+              <p className="text-xs text-emerald-600 dark:text-emerald-500/90 mt-0.5">
+                Raw card data has been discarded from active memory and exchanged for an authorized payment identifier:
+              </p>
+              <code className="block bg-white dark:bg-slate-900/80 border border-emerald-100 dark:border-emerald-950 text-[11px] font-mono p-2 rounded mt-2 text-slate-700 dark:text-slate-300 break-all select-all">
+                {paymentToken}
+              </code>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={onTokenizeAndPay} className="space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Cardholder Name</label>
+            <input
+              type="text"
+              required
+              disabled={isTokenizing}
+              className={`w-full bg-white dark:bg-slate-950 border text-sm rounded-lg px-3 py-2.5 outline-none transition-colors ${
+                validationErrors.cardholderName ? 'border-rose-500' : 'border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-300'
+              }`}
+              value={cardholderName}
+              onChange={(e) => setCardholderName(e.target.value)}
+              placeholder="Jane Doe"
+            />
+            {validationErrors.cardholderName && <p className="text-rose-500 text-xs mt-1">{validationErrors.cardholderName}</p>}
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Card Number</label>
+            <div className="relative">
+              <input
+                type="text"
+                required
+                disabled={isTokenizing}
+                className={`w-full bg-white dark:bg-slate-950 border text-sm rounded-lg pl-10 pr-3 py-2.5 outline-none transition-colors ${
+                  validationErrors.cardNumber ? 'border-rose-500' : 'border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-300'
+                }`}
+                value={cardNumber}
+                onChange={handleCardNumberChange}
+                placeholder="4111 2222 3333 4444"
+              />
+              <CreditCard className="absolute left-3.5 top-3 w-4 h-4 text-slate-400" />
+            </div>
+            {validationErrors.cardNumber && <p className="text-rose-500 text-xs mt-1">{validationErrors.cardNumber}</p>}
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Expiration Date</label>
+              <input
+                type="text"
+                required
+                disabled={isTokenizing}
+                className={`w-full bg-white dark:bg-slate-950 border text-sm rounded-lg px-3 py-2.5 outline-none transition-colors ${
+                  validationErrors.expiryDate ? 'border-rose-500' : 'border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-300'
+                }`}
+                value={expiryDate}
+                onChange={handleExpiryChange}
+                placeholder="MM/YY"
+              />
+              {validationErrors.expiryDate && <p className="text-rose-500 text-xs mt-1">{validationErrors.expiryDate}</p>}
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">CVV / Security Code</label>
+              <input
+                type="password"
+                required
+                disabled={isTokenizing}
+                className={`w-full bg-white dark:bg-slate-950 border text-sm rounded-lg px-3 py-2.5 outline-none transition-colors ${
+                  validationErrors.cvv ? 'border-rose-500' : 'border-slate-200 dark:border-slate-800 focus:border-slate-900 dark:focus:border-slate-300'
+                }`}
+                value={cvv}
+                onChange={handleCvvChange}
+                placeholder="•••"
+              />
+              {validationErrors.cvv && <p className="text-rose-500 text-xs mt-1">{validationErrors.cvv}</p>}
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isTokenizing}
+            className="w-full flex items-center justify-center gap-2 bg-slate-900 dark:bg-slate-150 hover:bg-slate-850 text-white dark:text-slate-900 text-sm font-semibold py-3 px-4 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {isTokenizing ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Generating Secure Payment Token...</span>
+              </>
+            ) : (
+              <>
+                <ShieldCheck className="w-4 h-4" />
+                <span>Verify & Tokenize Payment Credentials</span>
+              </>
+            )}
+          </button>
+        </form>
+      )}
+
+      <div className="pt-4 flex justify-between items-center border-t border-slate-100 dark:border-slate-800">
+        <button
+          type="button"
+          disabled={isTokenizing || isSubmitting}
+          onClick={() => setStep('delivery')}
+          className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 text-sm font-medium py-2.5 px-4 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors disabled:opacity-50"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>Back</span>
+        </button>
+
+        {paymentToken && (
+          <button
+            type="button"
+            disabled={isSubmitting}
+            onClick={submitOrder}
+            className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold py-2.5 px-6 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {isSubmitting ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>Processing Order...</span>
+              </>
+            ) : (
+              <>
+                <span>Complete Purchase</span>
+                <CheckCircle className="w-4 h-4" />
+              </>
+            )}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const SuccessConfirmation: React.FC = () => {
+  const { resetCheckout, shippingAddress } = useCheckout();
+
+  return (
+    <div className="text-center py-8 px-4 max-w-md mx-auto space-y-6">
+      <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400">
+        <CheckCircle className="w-10 h-10" />
+      </div>
+      
+      <div>
+        <h2 className="text-2xl font-bold text-slate-900 dark:text-white">Order Confirmed!</h2>
+        <p className="text-sm text-slate-500 mt-2">
+          Your payment token has been processed and order completed. A validation receipt has been transmitted to <span className="font-semibold text-slate-800 dark:text-slate-300">{shippingAddress.email || 'your inbox'}</span>.
+        </p>
+      </div>
+
+      <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-xl border border-slate-200/60 dark:border-slate-800 text-left text-xs space-y-2">
+        <div className="flex justify-between">
+          <span className="text-slate-400">Order ID:</span>
+          <span className="font-semibold text-slate-850 dark:text-slate-200">OP-39281-2893</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-400">Status:</span>
+          <span className="font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Ready for dispatch
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-slate-400">Deliver to:</span>
+          <span className="font-semibold text-slate-850 dark:text-slate-200 truncate max-w-50">
+            {shippingAddress.firstName} {shippingAddress.lastName}
+          </span>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={resetCheckout}
+        className="w-full flex items-center justify-center gap-2 border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-800 dark:text-slate-200 text-sm font-semibold py-2.5 px-4 rounded-lg transition-colors"
+      >
+        <span>Securely Start New Transaction</span>
+      </button>
+    </div>
+  );
+};
 
 // ==========================================
-// 3. TANSTACK QUERY CLIENT SETUP
+// DRAFT RESTORATION BANNER
 // ==========================================
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-});
+const RestorationBanner: React.FC = () => {
+  const { draftRestored, clearDraftRestoredAlert, resetCheckout } = useCheckout();
+
+  if (!draftRestored) return null;
+
+  return (
+    <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 text-amber-900 dark:text-amber-400 rounded-xl p-4 flex flex-col sm:flex-row gap-3 items-start justify-between mb-6">
+      <div className="flex gap-2.5">
+        <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+        <div>
+          <h4 className="text-sm font-semibold">Interruption Prevented</h4>
+          <p className="text-xs text-amber-700 dark:text-amber-500 mt-0.5">
+            Your non-sensitive shipping draft details were safely restored from a previous checkout attempt. Sensitive card details were intentionally excluded.
+          </p>
+        </div>
+      </div>
+      <div className="flex gap-2 shrink-0 self-end sm:self-center">
+        <button
+          onClick={clearDraftRestoredAlert}
+          className="bg-amber-650 hover:bg-amber-700 text-white dark:bg-amber-900/40 dark:hover:bg-amber-900/70 text-[11px] font-semibold px-2.5 py-1.5 rounded-md transition-colors"
+        >
+          Keep Progress
+        </button>
+        <button
+          onClick={resetCheckout}
+          className="text-[11px] font-semibold text-amber-800 dark:text-amber-500 hover:underline flex items-center gap-1"
+        >
+          <Trash2 className="w-3 h-3" /> Clear Draft
+        </button>
+      </div>
+    </div>
+  );
+};
 
 // ==========================================
-// 4. MAIN EXPORT COMPONENT
+// PIPELINE WRAPPER (VIEW ORCHESTRATION)
 // ==========================================
+
+const CheckoutPipeline: React.FC = () => {
+  const { step } = useCheckout();
+
+  const handleSimulateRefresh = () => {
+    window.location.reload();
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-300">
+      <header className="border-b border-slate-200 dark:border-slate-900 bg-white dark:bg-slate-950 sticky top-0 z-40">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="bg-slate-900 dark:bg-white text-white dark:text-slate-950 p-1.5 rounded-lg">
+              <ShieldCheck className="w-5 h-5" />
+            </div>
+            <span className="font-bold text-sm tracking-tight text-slate-900 dark:text-white">Secure Checkout Sandbox</span>
+          </div>
+
+          <div className="flex items-center gap-3">
+            {step !== 'confirmation' && (
+              <button
+                onClick={handleSimulateRefresh}
+                title="Simulate browser interruption or accidental closure to view state retention performance"
+                className="flex items-center gap-1.5 text-xs border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Simulate Interruption</span>
+              </button>
+            )}
+            
+            <div className="text-xs text-slate-400 bg-slate-100 dark:bg-slate-900 px-2.5 py-1.5 rounded-full flex items-center gap-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-500" />
+              <span>Sandbox Active</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-6xl mx-auto px-4 py-8">
+        <RestorationBanner />
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-6">
+            <div className="bg-white dark:bg-slate-950 border border-slate-200/60 dark:border-slate-900 rounded-2xl p-6 shadow-sm">
+              <ProgressBar />
+
+              <div className="mt-8">
+                {step === 'shipping' && <ShippingForm />}
+                {step === 'delivery' && <DeliveryMethodForm />}
+                {step === 'payment' && <PaymentForm />}
+                {step === 'confirmation' && <SuccessConfirmation />}
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-1">
+            <OrderSummary />
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+};
 
 export default function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500 selection:text-white">
-        
-        {/* Navigation Bar */}
-        <nav className="border-b border-slate-900 bg-slate-950/80 backdrop-blur sticky top-0 z-50">
-          <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Cpu className="text-indigo-400 h-5 w-5" />
-              <span className="font-mono text-sm tracking-wider font-semibold text-slate-200">
-                ARCHITECTURE.LOG // STUDY_04
-              </span>
-            </div>
-            <div className="flex items-center gap-4 text-xs text-slate-400 font-mono">
-              <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                LIVE SIMULATION ENGINE
-              </span>
-            </div>
-          </div>
-        </nav>
-
-        <TechnicalEngineBlog />
-      </div>
-    </QueryClientProvider>
-  );
-}
-
-// ==========================================
-// 5. BLOG WORKSPACE COMPONENT
-// ==========================================
-
-function TechnicalEngineBlog() {
-  const [watchlist, setWatchlist] = useState<string[]>(() => {
-    const saved = localStorage.getItem('crypto_watchlist');
-    return saved ? JSON.parse(saved) : ['bitcoin', 'ethereum', 'solana'];
-  });
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showWatchlistOnly, setShowWatchlistOnly] = useState(false);
-  const [simulateFailures, setSimulateFailures] = useState(true);
-  const [queueLength, setQueueLength] = useState(0);
-  const [logs, setLogs] = useState<string[]>([]);
-
-  // Synchronize watchlist state with browser storage
-  useEffect(() => {
-    localStorage.setItem('crypto_watchlist', JSON.stringify(watchlist));
-  }, [watchlist]);
-
-  // Connect interceptor metrics to React state
-  useEffect(() => {
-    apiInterceptor.registerCallbacks(
-      (len) => setQueueLength(len),
-      (msg) => setLogs((prev) => [
-        `[${new Date().toLocaleTimeString()}] ${msg}`, 
-        ...prev.slice(0, 14)
-      ])
-    );
-  }, []);
-
-  return (
-    <main className="max-w-7xl mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-12 gap-8">
-      
-      {/* Left Column: Case Study Write-up */}
-      <div className="lg:col-span-7 space-y-8">
-        <div className="space-y-4">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono bg-indigo-950/60 text-indigo-300 border border-indigo-800/40">
-            <BookOpen className="h-3 w-3" /> Architecture Blueprint
-          </div>
-          <h1 className="text-3xl lg:text-4xl font-bold tracking-tight text-white leading-tight">
-            Client-Side Request Spacing: Solving Third-Party Throttling in Frontend-Only Dashboards
-          </h1>
-          <p className="text-slate-400 text-sm leading-relaxed">
-            When building serverless or client-only web applications, relying directly on public, third-party REST APIs introduces rate limits. This case study details the implementation of a micro-queue interceptor pattern built to handle downstream resource constraints.
-          </p>
-        </div>
-
-        {/* Dynamic Queue Flow Diagram */}
-        <div className="bg-slate-900/40 border border-slate-900 rounded-xl p-6 space-y-4">
-          <h3 className="text-xs font-mono text-slate-400 uppercase tracking-widest">
-            Data Interception &amp; Request Flow Lifecycle
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-center text-xs">
-            
-            <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 flex flex-col items-center justify-center space-y-2">
-              <Database className="text-slate-400 h-4 w-4" />
-              <span className="font-semibold text-slate-300">TanStack Query</span>
-              <p className="text-[10px] text-slate-500">Initiates periodic, state-aware polling schedules.</p>
-            </div>
-
-            <div className="bg-slate-950 p-4 rounded-lg border border-indigo-900/50 flex flex-col items-center justify-center space-y-2 relative">
-              <Cpu className="text-indigo-400 h-4 w-4" />
-              <span className="font-semibold text-indigo-300">Queue Interceptor</span>
-              <p className="text-[10px] text-slate-500">Buffers, paces, and serializes incoming promises.</p>
-              <ChevronRight className="hidden sm:block absolute -right-2 top-1/2 -translate-y-1/2 text-slate-800 z-10 h-4 w-4" />
-            </div>
-
-            <div className="bg-slate-950 p-4 rounded-lg border border-slate-800 flex flex-col items-center justify-center space-y-2">
-              <Terminal className="text-slate-400 h-4 w-4" />
-              <span className="font-semibold text-slate-300">Rate Limited API</span>
-              <p className="text-[10px] text-slate-500">Responds safely inside rate boundaries.</p>
-            </div>
-
-          </div>
-        </div>
-
-        {/* Written Analysis */}
-        <article className="space-y-6 text-sm text-slate-300 leading-relaxed">
-          <section className="space-y-3">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <span className="font-mono text-xs text-indigo-500">01 /</span> The Architectural Problem
-            </h3>
-            <p>
-              Most free cryptocurrency market data endpoints enforce strict rate limits. If a user configures a polling frequency of 8 seconds on multiple custom watchlists, a single browser tab can trigger an HTTP 429 error within minutes.
-            </p>
-            <p className="text-slate-400">
-              A common, naive solution is simply increasing the polling interval globally, which compromises dashboard real-time fidelity. An alternative, more robust pattern is introducing a <strong>serialized client-side middleware</strong> that queues parallel requests and serializes dispatch times.
-            </p>
-          </section>
-
-          <section className="space-y-3">
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <span className="font-mono text-xs text-indigo-500">02 /</span> The Serialization Pattern
-            </h3>
-            <p>
-              The interceptor class featured on this page implements a scheduling mechanism. When TanStack Query initiates a fetch event, the native request is captured and wrapped inside a custom promise. This promise is enqueued:
-            </p>
-            <pre className="bg-slate-950 p-4 rounded-lg border border-slate-900 text-xs font-mono text-slate-400 overflow-x-auto space-y-1">
-              <code>{`class ClientSideRateLimitInterceptor {`}</code><br />
-              <code>{`  private queue: QueueItem[] = [];`}</code><br />
-              <code>{`  private minIntervalMs = 1500; // Enforces a spacing gap`}</code><br />
-              <code>{`}`}</code>
-            </pre>
-            <p>
-              By processing tasks with a mandatory spacing gap (`minIntervalMs`), we guarantee that downstream services are not over-saturated during sudden manual interface updates or race conditions.
-            </p>
-          </section>
-        </article>
-      </div>
-
-      {/* Right Column: Live Diagnostic Sandbox */}
-      <div className="lg:col-span-5 space-y-6">
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-6 shadow-xl sticky top-24">
-          
-          {/* Diagnostic Console Header */}
-          <div className="space-y-4">
-            <h2 className="text-sm font-mono tracking-wider font-bold text-indigo-300 uppercase flex items-center gap-2">
-              <Cpu className="h-4 w-4" /> Live Execution Sandbox
-            </h2>
-            <p className="text-xs text-slate-400">
-              Pace background fetching and intercept artificial network errors in real time. Use the controls below to interact with the runtime.
-            </p>
-          </div>
-
-          {/* Queue Diagnostics */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-slate-950 p-3 rounded-lg border border-slate-850">
-              <span className="text-[10px] text-slate-500 font-mono block">QUEUE BACKLOG</span>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className={`text-xl font-bold font-mono ${queueLength > 0 ? 'text-amber-400' : 'text-slate-300'}`}>
-                  {queueLength}
-                </span>
-                <span className="text-[9px] text-slate-600 font-mono">Tasks pending</span>
-              </div>
-            </div>
-
-            <div className="bg-slate-950 p-3 rounded-lg border border-slate-850">
-              <span className="text-[10px] text-slate-500 font-mono block">RATE THROTTLING</span>
-              <span className="text-xs font-mono font-semibold text-indigo-400 block mt-1.5">
-                1.5s Serialization
-              </span>
-            </div>
-          </div>
-
-          {/* Logger Console */}
-          <div className="space-y-2">
-            <span className="text-[10px] text-slate-400 font-mono uppercase tracking-wider block">
-              Interceptor Output Logs
-            </span>
-            <div className="h-32 bg-slate-950 rounded-lg border border-slate-850 p-3 font-mono text-[10px] text-slate-400 overflow-y-auto space-y-1">
-              {logs.length === 0 ? (
-                <div className="text-slate-600 italic">Logs are populated on fetch events...</div>
-              ) : (
-                logs.map((log, index) => (
-                  <div key={index} className="truncate border-l border-slate-800 pl-2">
-                    {log}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {/* Live System Interface Integration */}
-          <div className="border-t border-slate-800 pt-6">
-            <LiveDashboard 
-              watchlist={watchlist} 
-              setWatchlist={setWatchlist}
-              searchQuery={searchQuery}
-              setSearchQuery={setSearchQuery}
-              showWatchlistOnly={showWatchlistOnly}
-              setShowWatchlistOnly={setShowWatchlistOnly}
-              simulateFailures={simulateFailures}
-              setSimulateFailures={setSimulateFailures}
-            />
-          </div>
-
-        </div>
-      </div>
-
-    </main>
-  );
-}
-
-// ==========================================
-// 6. DETAILED SANDBOX INTERFACE
-// ==========================================
-
-interface LiveDashboardProps {
-  watchlist: string[];
-  setWatchlist: React.Dispatch<React.SetStateAction<string[]>>;
-  searchQuery: string;
-  setSearchQuery: (val: string) => void;
-  showWatchlistOnly: boolean;
-  setShowWatchlistOnly: (val: boolean) => void;
-  simulateFailures: boolean;
-  setSimulateFailures: (val: boolean) => void;
-}
-
-function LiveDashboard({
-  watchlist,
-  setWatchlist,
-  searchQuery,
-  setSearchQuery,
-  showWatchlistOnly,
-  setShowWatchlistOnly,
-  simulateFailures,
-  setSimulateFailures
-}: LiveDashboardProps) {
-  const queryClient = useQueryClient();
-
-  // Polling query that intercepts data fetching using our queue
-  const { data: coins, isFetching, error, refetch } = useQuery<CoinData[]>({
-    queryKey: ['cryptoMarkets'],
-    queryFn: () => apiInterceptor.fetchResilient('https://api.coingecko.com/api/v3/coins/markets', simulateFailures),
-    refetchInterval: 8000, 
-  });
-
-  const toggleWatchlist = (id: string) => {
-    setWatchlist(prev => 
-      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
-    );
-  };
-
-  const processedCoins = useMemo(() => {
-    if (!coins) return [];
-    return coins.filter(coin => {
-      const matchesSearch = coin.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            coin.symbol.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesWatchlist = showWatchlistOnly ? watchlist.includes(coin.id) : true;
-      return matchesSearch && matchesWatchlist;
-    });
-  }, [coins, searchQuery, showWatchlistOnly, watchlist]);
-
-  return (
-    <div className="space-y-4">
-      
-      {/* Search Input and Watchlist Filter */}
-      <div className="flex items-center gap-2">
-        <div className="relative flex-grow">
-          <Search className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-slate-500" />
-          <input
-            type="text"
-            placeholder="Search dashboard assets..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-950 text-xs rounded-md pl-8 pr-3 py-2 text-slate-200 border border-slate-850 focus:outline-none focus:border-indigo-500 transition"
-          />
-        </div>
-        
-        <button
-          onClick={() => setShowWatchlistOnly(!showWatchlistOnly)}
-          className={`flex items-center gap-1 px-2.5 py-2 text-xs rounded-md border transition ${
-            showWatchlistOnly 
-              ? 'bg-amber-950/20 text-amber-300 border-amber-800/40' 
-              : 'bg-slate-950 text-slate-400 border-slate-850 hover:text-slate-200'
-          }`}
-        >
-          <Star className={`h-3 w-3 ${showWatchlistOnly ? 'fill-amber-400 text-amber-400' : ''}`} />
-          {watchlist.length}
-        </button>
-      </div>
-
-      {/* Control Actions */}
-      <div className="flex items-center justify-between bg-slate-950 p-2.5 rounded-lg border border-slate-850 text-xs">
-        <span className="text-slate-400 font-mono text-[10px]">THROTTLING SIMULATOR:</span>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setSimulateFailures(!simulateFailures)}
-            className={`px-2 py-0.5 rounded text-[10px] font-mono transition ${
-              simulateFailures 
-                ? 'bg-amber-950/40 text-amber-300 border border-amber-800' 
-                : 'bg-slate-900 text-slate-400 border border-slate-800'
-            }`}
-          >
-            {simulateFailures ? 'Simulate 429 Errors' : 'Ignore API Errors'}
-          </button>
-          
-          <button
-            onClick={() => {
-              // Clear cache and queue multiple fetches to demonstrate the queue execution flow
-              queryClient.invalidateQueries({ queryKey: ['cryptoMarkets'] });
-              refetch();
-              refetch();
-              refetch();
-            }}
-            className="flex items-center gap-1 px-2 py-0.5 bg-indigo-950/50 hover:bg-indigo-900/40 border border-indigo-800 text-[10px] text-indigo-300 rounded font-mono transition"
-          >
-            <RefreshCw className={`h-2.5 w-2.5 ${isFetching ? 'animate-spin' : ''}`} />
-            Force Burst
-          </button>
-        </div>
-      </div>
-
-      {/* Mini Data View Table */}
-      {error ? (
-        <div className="p-4 bg-red-950/10 border border-red-900/30 rounded-lg text-center text-xs text-red-400">
-          <AlertTriangle className="h-4 w-4 text-red-500 mx-auto mb-1.5" />
-          The request was systematically throttled. The queue scheduler will back-off and retry.
-        </div>
-      ) : (
-        <div className="bg-slate-950 rounded-lg border border-slate-850 overflow-hidden">
-          <div className="max-h-56 overflow-y-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="sticky top-0 bg-slate-950/90 backdrop-blur border-b border-slate-850 z-10 text-[10px] text-slate-500 uppercase tracking-wider font-mono">
-                <tr>
-                  <th className="py-2 px-3 w-10 text-center">Fav</th>
-                  <th className="py-2 px-2">Asset</th>
-                  <th className="py-2 px-2 text-right">Price</th>
-                  <th className="py-2 px-3 text-right">24h Shift</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-900">
-                {processedCoins.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="text-center py-8 text-slate-500 italic">
-                      No matching assets found.
-                    </td>
-                  </tr>
-                ) : (
-                  processedCoins.map((coin) => {
-                    const isFavorited = watchlist.includes(coin.id);
-                    return (
-                      <tr key={coin.id} className="hover:bg-slate-900/20 transition-colors">
-                        <td className="py-2.5 px-3 text-center">
-                          <button 
-                            onClick={() => toggleWatchlist(coin.id)}
-                            className="focus:outline-none"
-                          >
-                            <Star className={`h-3.5 w-3.5 ${
-                              isFavorited ? 'fill-amber-400 text-amber-400' : 'text-slate-600 hover:text-slate-400'
-                            }`} />
-                          </button>
-                        </td>
-                        <td className="py-2.5 px-2 font-medium text-white">
-                          <span className="mr-1">{coin.name}</span>
-                          <span className="text-[10px] text-slate-500 uppercase">{coin.symbol}</span>
-                        </td>
-                        <td className="py-2.5 px-2 text-right font-mono text-slate-200">
-                          ${coin.current_price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-2.5 px-3 text-right font-mono">
-                          <span className={`inline-flex items-center gap-0.5 text-[10px] font-semibold px-1 py-0.5 rounded ${
-                            coin.price_change_percentage_24h >= 0 
-                              ? 'text-emerald-400' 
-                              : 'text-rose-400'
-                          }`}>
-                            {coin.price_change_percentage_24h >= 0 ? (
-                              <ArrowUpRight className="h-2.5 w-2.5" />
-                            ) : (
-                              <ArrowDownRight className="h-2.5 w-2.5" />
-                            )}
-                            {Math.abs(coin.price_change_percentage_24h)}%
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-      
-    </div>
+    <CheckoutProvider>
+      <CheckoutPipeline />
+    </CheckoutProvider>
   );
 }
