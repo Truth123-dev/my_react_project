@@ -113,7 +113,7 @@ export default function Resume() {
               </p>
             </div>
             <a 
-              href="https://my-react-project-eta-lime.vercel.app" 
+              href="https://my-react-project-c43xwcyvk-elijahvision-s-projects.vercel.app" 
               target="_blank" 
               rel="noopener noreferrer" 
               className="w-full md:w-auto text-center px-6 py-3 bg-white text-slate-950 font-bold text-xs rounded-xl hover:bg-slate-100 transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
