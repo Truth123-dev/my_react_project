@@ -226,7 +226,7 @@ export default function Resume() {
                   
                   <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-2">
                     <div>
-                      <h3 className="font-semibold text-slate-900 text-sm">Senior Frontend Engineer</h3>
+                      <h3 className="font-semibold text-slate-900 text-sm">Junior Frontend Engineer</h3>
                       <p className="text-xs text-slate-500">Global Software Systems | Remote</p>
                     </div>
                     <span className="inline-flex items-center px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-[10px] font-medium mt-1 sm:mt-0">

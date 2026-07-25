@@ -50,7 +50,7 @@ export default function Portfolio() {
   const role = "Junior Frontend Engineer";
   const email = "isaiaheli224@gmail.com";
   const githubUrl = "https://github.com/Truth123-dev/"; 
-  const linkedinUrl = "https://linkedin.com/in/your-username"; 
+  const linkedinUrl = "https://www.linkedin.com/in/elijah-isaiah-873139330"; 
   const resumeUrl = ""; 
   const profilePictureUrl = "src/assets/Elijah Pic.jpeg"; 
 
