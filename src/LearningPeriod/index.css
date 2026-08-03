@@ -1,0 +1,15 @@
+
+
+/* 1. This is the container holding our toy cards */
+.card-container {
+  display: flex;
+  flex-direction: row; /* Laptop: Side-by-side like a train */
+  gap: 16px;           /* Space between each card */
+}
+
+/* 2. The Media Query (The Screen Detector) */
+@media (max-width: 600px) {
+  .card-container {
+    flex-direction: column; /* Mobile: Stacked on top of each other like blocks */
+  }
+}
