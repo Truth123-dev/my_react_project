@@ -65,7 +65,7 @@
   },
   "allowScripts": {
     "@google/genai@2.10.0": true,
-    "protobufjs@7.6.4": true,
-    "cypress@15.18.1": true
+    "cypress@15.18.1": true,
+    "protobufjs@7.6.5": true
   }
 }
