@@ -1,22 +1,16 @@
 
 
+
+
 import React from 'react';
-import { Navbar } from './components/Navbar';
-import { Hero } from './components/Hero';
-import { Features } from './components/Features';
-import { Footer } from './components/Footer';
+import { DataTable } from './components/DataTable';
 
 const App: React.FC = () => {
   return (
-    <div className="min-h-screen bg-white text-gray-900 flex flex-col justify-between">
-      <div>
-        <Navbar />
-        <main>
-          <Hero />
-          <Features />
-        </main>
+    <div className="min-h-screen bg-gray-700 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        <DataTable />
       </div>
-      <Footer />
     </div>
   );
 };
